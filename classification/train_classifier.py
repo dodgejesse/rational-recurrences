@@ -90,6 +90,7 @@ class Model(nn.Module):
     def forward(self, input):
         if self.args.model == "rrnn":
             input_fwd = input
+            import pdb; pdb.set_trace()
             emb_fwd = self.emb_layer(input_fwd)
 #            if self.training:
             if True:
@@ -461,11 +462,18 @@ def main(args):
     if args.seed:
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
-    train_X, train_Y, valid_X, valid_Y, test_X, _ = dataloader.read_SST(args.path)
+
+    if args.bert_embed:
+        train_X, train_Y, valid_X, valid_Y, test_X, _ = dataloader.read_bert(args.path)
+    else:
+        train_X, train_Y, valid_X, valid_Y, test_X, _ = dataloader.read_SST(args.path)
     data = train_X + valid_X + test_X
 
+    
     if args.loaded_embedding:
         embs = args.loaded_embedding
+    elif args.bert_embed:
+        embs = None
     else:
         embs = dataloader.load_embedding(args.embedding)
     emb_layer = modules.EmbeddingLayer(
@@ -473,12 +481,14 @@ def main(args):
         fix_emb=args.fix_embedding,
         sos=SOS,
         eos=EOS,
-        embs=embs
+        embs=embs,
+        bert_embed=args.bert_embed
     )
 
     nclasses = max(train_Y) + 1
     random_perm = list(range(len(train_X)))
     np.random.shuffle(random_perm)
+    import pdb; pdb.set_trace()
     valid_x, valid_y = dataloader.create_batches(
         valid_X, valid_Y,
         args.batch_size,
@@ -486,7 +496,8 @@ def main(args):
         sort=True,
         gpu=args.gpu,
         sos=SOS,
-        eos=EOS
+        eos=EOS,
+        bert_embed=args.bert_embed
     )
 
     model = Model(args, emb_layer, nclasses)

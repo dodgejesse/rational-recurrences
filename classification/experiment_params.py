@@ -61,7 +61,8 @@ class ExperimentParams:
                  logging_dir="/home/jessedd/projects/rational-recurrences/classification/logging/",
                  base_data_dir="/home/jessedd/data/",
                  output_dir=None,
-                 input_model=None
+                 input_model=None,
+                 bert_embed=False
     ):
         self.path = path 
         self.embedding = embedding
@@ -110,6 +111,7 @@ class ExperimentParams:
         self.base_data_dir = base_data_dir
         self.output_dir = output_dir
         self.input_model = input_model
+        self.bert_embed = bert_embed
         
         self.current_experiment()
 
