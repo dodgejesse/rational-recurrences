@@ -40,7 +40,7 @@ class EmbeddingLayer(nn.Module):
         self.bert_embed = bert_embed
         if bert_embed:
             self.word2id = None
-            self.n_d = 3072 # DEBUGGING THIS IS A HACK!
+            self.n_d = len(words[0][0])
             return
         
         if embs is not None:

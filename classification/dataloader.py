@@ -108,9 +108,9 @@ def read_SST(path, seed=1234):
 
 # to read a dataset preprocessed with bert embeddings.
 def read_bert(path, seed=1234):
-    train_path = os.path.join(path, "train_bert_debug")
-    valid_path = os.path.join(path, "dev_bert_debug")
-    test_path = os.path.join(path, "test_bert_debug")
+    train_path = os.path.join(path, "train_bert")
+    valid_path = os.path.join(path, "dev_bert")
+    test_path = os.path.join(path, "test_bert")
     train_x, train_y = read_bert_file(train_path)
     valid_x, valid_y = read_bert_file(valid_path)
     test_x, test_y = read_bert_file(test_path)
@@ -208,15 +208,13 @@ def pad_bert(sequences):
 
 
 def create_one_batch_bert(x, y, gpu=False):
-    import pdb; pdb.set_trace()
     x_fwd = pad_bert(x)
     length = len(x_fwd[0])
     batch_size = len(x_fwd)
     x_fwd = [ w for seq in x_fwd for w in seq ]
-    x_fwd = torch.tensor(x_fwd)
+    x_fwd = torch.Tensor(x_fwd)
     assert x_fwd.size(0) == length*batch_size
-    x_fwd, y = x_fwd.view(batch_size, length).t().contiguous(), torch.LongTensor(y)
-    assert False, "next step: fix above line so it's in the correct shape"
+    x_fwd, y = x_fwd.view(batch_size, length, x_fwd.size(1)).permute(1,0,2).contiguous(), torch.LongTensor(y)
     if gpu:
         x_fwd, y = x_fwd.cuda(), y.cuda()
     return (x_fwd), y

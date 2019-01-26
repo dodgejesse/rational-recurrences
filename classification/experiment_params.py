@@ -62,7 +62,8 @@ class ExperimentParams:
                  base_data_dir="/home/jessedd/data/",
                  output_dir=None,
                  input_model=None,
-                 bert_embed=False
+                 bert_embed=False,
+                 loaded_data=None
     ):
         self.path = path 
         self.embedding = embedding
@@ -112,6 +113,7 @@ class ExperimentParams:
         self.output_dir = output_dir
         self.input_model = input_model
         self.bert_embed = bert_embed
+        self.loaded_data = loaded_data
         
         self.current_experiment()
 
