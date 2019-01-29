@@ -4,27 +4,27 @@ import torch.nn as nn
 from torch.autograd import Variable
 
 
-def RRNN_Ngram_Compute_CPU(d, k, semiring, bidirectional=False):
+def RRNN_Ngram_Compute_CPU(d, ngram, semiring, bidirectional=False):
 
     def rrnn_compute_cpu(u, cs_init=None, eps=None):
         assert eps is None, "haven't implemented epsilon steps with arbitrary n-grams. Please set command line param to False."
         bidir = 2 if bidirectional else 1
-        assert u.size(-1) == k
+        assert u.size(-1) == ngram * 2
         length, batch = u.size(0), u.size(1)
 
         for i in range(len(cs_init)):
             cs_init[i] = cs_init[i].contiguous().view(batch, bidir, d)
 
         us = []
-        for i in range(0,int(k/2)):
+        for i in range(ngram):
             us.append(u[..., i])
         forgets = []
-        for i in range(int(k/2), k):
+        for i in range(ngram, ngram*2):
             forgets.append(u[..., i])
 
-        cs_final = [[] for i in range(int(k/2))]
+        cs_final = [[] for i in range(ngram)]
 
-        css = [Variable(u.data.new(length, batch, bidir, d)) for i in range(int(k/2))]
+        css = [Variable(u.data.new(length, batch, bidir, d)) for i in range(ngram)]
 
         for di in range(bidir):
             if di == 0:
@@ -258,12 +258,14 @@ class RRNNCell(nn.Module):
             # it should be of the form "4-gram"
             # should probably implement epsilon stuff, as in bigram
             ngram = int(self.pattern.split("-")[0])
-            self.k = 2 * (ngram)
+            self.ngram = ngram# k = 2 * (ngram)
 
-        
+        self.k = 2 * self.ngram
+        if self.use_output_gate:
+            self.k += 1
         if self.pattern != "unigram" and self.pattern != "1-gram":
             if self.use_rho:
-                self.bias_final = nn.Parameter(torch.Tensor(self.bidir*n_out*int(self.k/2)))
+                self.bias_final = nn.Parameter(torch.Tensor(self.bidir*n_out*self.ngram))
             if self.use_epsilon_steps:
                 self.bias_eps = nn.Parameter(torch.Tensor(self.bidir*n_out))
 
@@ -536,7 +538,7 @@ class RRNNCell(nn.Module):
         if init_hidden is None:
             size = (batch, n_out * bidir)
             cs_init = []
-            for i in range(int(self.k/2)):
+            for i in range(self.ngram):
                 cs_init.append(Variable(input.data.new(*size).zero_()))
 
         else:
@@ -559,42 +561,46 @@ class RRNNCell(nn.Module):
         # optional: output.
         bias = self.bias.view(self.k, bidir, n_out)
 
-        u = Variable(u_.data.new(length, batch, bidir, n_out, self.k))
+        u = Variable(u_.data.new(length, batch, bidir, n_out, 2*self.ngram))
 
-        for i in range(int(self.k/2),self.k):
+        for i in range(self.ngram, 2*self.ngram):
             forget_bias = bias[i, ...]
             u[..., i] = (u_[..., i] + forget_bias).sigmoid()   # forget 
 
-        for i in range(0, int(self.k/2)):
-            u[..., i] = u_[..., i] * (1. - u[..., i + int(self.k/2)])  # input
+        for i in range(0, self.ngram):
+            u[..., i] = u_[..., i] * (1. - u[..., i + self.ngram])  # input
+
+        if self.use_output_gate:
+            output_bias = bias[-1, ...]
+            output = (u_[..., -1] + output_bias).sigmoid()
             
         if input.is_cuda:
 
-            if self.k == 8:
+            if self.ngram == 4:
 
                 from rrnn_gpu import RRNN_4gram_Compute_GPU
-                RRNN_Compute_GPU = RRNN_4gram_Compute_GPU(n_out, self.k, self.semiring, self.bidirectional)
+                RRNN_Compute_GPU = RRNN_4gram_Compute_GPU(n_out, 8, self.semiring, self.bidirectional)
                 c1s, c2s, c3s, c4s, last_c1, last_c2, last_c3, last_c4 = RRNN_Compute_GPU(u, cs_init[0], cs_init[1], cs_init[2], cs_init[3])
                 css = [c1s, c2s, c3s, c4s]
                 cs_final = [last_c1, last_c2, last_c3, last_c4]
 
-            elif self.k == 6:
+            elif self.ngram == 3:
                 from rrnn_gpu import RRNN_3gram_Compute_GPU
-                RRNN_Compute_GPU = RRNN_3gram_Compute_GPU(n_out, self.k, self.semiring, self.bidirectional)
+                RRNN_Compute_GPU = RRNN_3gram_Compute_GPU(n_out, 6, self.semiring, self.bidirectional)
                 c1s, c2s, c3s, last_c1, last_c2, last_c3 = RRNN_Compute_GPU(u, cs_init[0], cs_init[1], cs_init[2])
                 css = [c1s, c2s, c3s]
                 cs_final = [last_c1, last_c2, last_c3]
 
-            elif self.k == 4:
+            elif self.ngram == 2:
                 from rrnn_gpu import RRNN_2gram_Compute_GPU
-                RRNN_Compute_GPU = RRNN_2gram_Compute_GPU(n_out, self.k, self.semiring, self.bidirectional)
+                RRNN_Compute_GPU = RRNN_2gram_Compute_GPU(n_out, 4, self.semiring, self.bidirectional)
                 c1s, c2s, last_c1, last_c2 = RRNN_Compute_GPU(u, cs_init[0], cs_init[1])
                 css = [c1s, c2s]
                 cs_final = [last_c1, last_c2]
 
-            elif self.k == 2:
+            elif self.ngram == 1:
                 from rrnn_gpu import RRNN_1gram_Compute_GPU
-                RRNN_Compute_GPU = RRNN_1gram_Compute_GPU(n_out, self.k, self.semiring, self.bidirectional)
+                RRNN_Compute_GPU = RRNN_1gram_Compute_GPU(n_out, 2, self.semiring, self.bidirectional)
                 c1s, last_c1 = RRNN_Compute_GPU(u, cs_init[0])
                 css = [c1s]
                 cs_final = [last_c1]
@@ -602,7 +608,7 @@ class RRNNCell(nn.Module):
             else:
                 assert False, "custom cuda kernel only implemented for 1,2,3,4-gram models"                
         else:
-            RRNN_Compute = RRNN_Ngram_Compute_CPU(n_out, self.k, self.semiring, self.bidirectional)
+            RRNN_Compute = RRNN_Ngram_Compute_CPU(n_out, self.ngram, self.semiring, self.bidirectional)
             css, cs_final = RRNN_Compute(u, cs_init, eps=None)
 
 
@@ -627,7 +633,7 @@ class RRNNCell(nn.Module):
                 cs = sum(css)
 
         if self.use_output_gate:
-            assert False, "THIS HASN'T BEEN IMPLEMENTED YET!"
+            # assert False, "THIS HASN'T BEEN IMPLEMENTED YET!"
             gcs = self.calc_activation(output*cs)
         else:
             gcs = self.calc_activation(cs)
