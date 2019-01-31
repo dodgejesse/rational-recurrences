@@ -526,9 +526,9 @@ def main(args):
         model.embedding_layer.n_V
     ))
     num_params = sum(x.numel() for x in model.parameters() if x.requires_grad)
-    if args.model == "rrnn":
-        num_in = args.depth * (2 * args.d)
-        num_params = num_params - num_in
+    # if args.model == "rrnn":
+        # num_in = args.depth * (2 * args.d)
+        # num_params = num_params - num_in
     
     sys.stdout.write("num of parameters: {}\n".format(num_params))
     sys.stdout.flush()
@@ -576,7 +576,7 @@ if __name__ == "__main__":
         help="dropout of RNN layers")
     argparser.add_argument("--depth", type=int, default=2)
     argparser.add_argument("--num_mlp_layer", type=int, default=1)
-    argparser.add_argument("--lr", type=float, default=1e-3)
+    argparser.add_argument("--lr", type=float, default=1.0)
     argparser.add_argument("--lr_decay", type=float, default=0.98)
     argparser.add_argument("--lr_decay_epoch", type=int, default=0)
     argparser.add_argument("--weight_decay", type=float, default=1e-6)
