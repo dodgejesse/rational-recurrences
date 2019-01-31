@@ -3,36 +3,15 @@ num_cpu=1
 export CUDA_VISIBLE_DEVICES=${gpu_id}
 export OMP_NUM_THREADS=${num_cpu}
 
-# pattern="1-gram,2-gram,3-gram,4-gram"
-# hidden_size="150,150,150,150"
-# d=600
-# input_dropout=0.6
-# output_dropout=0.6
-
-# pattern="1-gram,2-gram,3-gram"
-# hidden_size="210,210,210"
-# d=630
-# input_dropout=0.6
-# output_dropout=0.6
-
-# pattern="1-gram,2-gram"
-# hidden_size="330,330"
-# d=660
-# input_dropout=0.6
-# output_dropout=0.6
-
-pattern="1-gram"
-hidden_size="710"
-d=710
-input_dropout=0.65
-output_dropout=0.65
-
+hidden_size="150,150,150,150"
+d=600
 lr=1.0
 lr_decay=0.98
 lr_decay_epoch=150
 activation="tanh"
 batch_size=32
 model="rrnn"
+pattern="1-gram,2-gram,3-gram,4-gram"
 depth=2
 input_dropout=0.6
 output_dropout=0.6
@@ -46,7 +25,6 @@ weight_decay=1e-5
 patience=30
 gpu=True
 
-nohup \
 ~/bin/python3.6 train_lm.py --train data/train --dev data/dev --test data/test \
 --hidden_size=$hidden_size \
 --d=$d \
@@ -69,4 +47,4 @@ nohup \
 --weight_decay=$weight_decay \
 --patience=$patience \
 --gpu=$gpu \
-> log/${pattern}.${hidden_size}.${depth}.${input_dropout}.${output_dropout}.${dropout}.${lr}.${lr_decay}.${lr_decay_epoch} &
+# > log/${hidden_size}.${depth}.${input_dropout}.${output_dropout}.${dropout}.${lr}.${lr_decay}.${lr_decay_epoch} &
