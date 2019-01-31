@@ -61,8 +61,6 @@ def RRNN_Ngram_Compute_CPU(d, ngram, semiring, bidirectional=False):
     else:
         assert False, "OTHER SEMIRINGS NOT IMPLEMENTED!"
 
-        
-
 def RRNN_Bigram_Compute_CPU(d, k, semiring, bidirectional=False):
     """CPU version of the core RRNN computation.
 
@@ -534,7 +532,6 @@ class RRNNCell(nn.Module):
         n_in, n_out = self.n_in, self.n_out
         length, batch = input.size(0), input.size(-2)
         bidir = self.bidir
-
         if init_hidden is None:
             size = (batch, n_out * bidir)
             cs_init = []
@@ -542,10 +539,10 @@ class RRNNCell(nn.Module):
                 cs_init.append(Variable(input.data.new(*size).zero_()))
 
         else:
-            assert False, "NOT IMPLEMENTED!"
-            assert (len(init_hidden) == 2)
-            c1_init, c2_init, = init_hidden
+            # assert False, "NOT IMPLEMENTED!"
 
+            assert (len(init_hidden) == self.ngram)
+            cs_init = init_hidden
         if self.training and (self.rnn_dropout>0):
             mask = self.get_dropout_mask_((1, batch, n_in), self.rnn_dropout)
             x = input * mask.expand_as(input)
@@ -573,7 +570,7 @@ class RRNNCell(nn.Module):
         if self.use_output_gate:
             output_bias = bias[-1, ...]
             output = (u_[..., -1] + output_bias).sigmoid()
-            
+
         if input.is_cuda:
 
             if self.ngram == 4:
@@ -612,7 +609,6 @@ class RRNNCell(nn.Module):
             css, cs_final = RRNN_Compute(u, cs_init, eps=None)
 
 
-
         # instead of using \rho to weight the sum, we can give uniform weight. this might be
         # more interpretable, as the \rhos might counteract the regularization terms
         if self.use_rho:
@@ -631,13 +627,16 @@ class RRNNCell(nn.Module):
                 cs = css[-1]
             else:
                 cs = sum(css)
-
+        #print ("%d############" % self.ngram)
+        #print (cs)
+        #print ("##########")
+        #print (css)
+        #print ("##################################################################################################################################")
         if self.use_output_gate:
             # assert False, "THIS HASN'T BEEN IMPLEMENTED YET!"
             gcs = self.calc_activation(output*cs)
         else:
             gcs = self.calc_activation(cs)
-
         return gcs.view(length, batch, -1), cs_final
 
     
@@ -719,18 +718,19 @@ class RRNNLayer(nn.Module):
             
     def forward(self, input, init_hidden=None):
         #import pdb; pdb.set_trace()
-        gcs, cs_final = self.cells[0](input, init_hidden)
+        cs_finals = []
+        gcs, cs_final = self.cells[0](input, init_hidden[0] if init_hidden else None)
+        cs_finals.append(cs_final)
         for i, cell in enumerate(self.cells):
             if i == 0:
                 continue
             else:
-                gcs_cur, _ = cell(input, init_hidden)
+                gcs_cur, cs_final= cell(input, init_hidden[i] if init_hidden else None)
                 gcs = torch.cat((gcs, gcs_cur), 2)
                 #for j in range(len(cs_final)):
                 #    cs_final[j] = torch.cat((cs_final[j], cs_final_cur[j]), 1)
-                #cs_final = torch.cat(cs_final, cs_final_cur)
-
-        return gcs, None
+                cs_finals.append(cs_final)
+        return gcs, cs_finals
     
         
 class RRNN(nn.Module):
@@ -860,31 +860,32 @@ class RRNN(nn.Module):
         if init_hidden is None:
             init_hidden = [None for _ in range(self.num_layers)]
         else:
-            assert False, "THIS IS NOT IMPLEMENTED, I DON'T THINK IT'S NECESSARY FOR CLASSIFICATION"
-            for c in init_hidden:
-                assert c.dim() == int(self.k/2)
-            init_hidden = [(c1.squeeze(0), c2.squeeze(0))
-                           for c1, c2 in zip(
-                    init_hidden[0].chunk(self.num_layers, 0),
-                    init_hidden[1].chunk(self.num_layers, 0)
-                )]
+            init_hidden = init_hidden
+            # assert False, "THIS IS NOT IMPLEMENTED, I DON'T THINK IT'S NECESSARY FOR CLASSIFICATION"
+            # for c in init_hidden:
+            #     assert c.dim() == int(self.k/2)
+            # init_hidden = [(c1.squeeze(0), c2.squeeze(0))
+            #                for c1, c2 in zip(
+            #         init_hidden[0].chunk(self.num_layers, 0),
+            #         init_hidden[1].chunk(self.num_layers, 0)
+            #     )]
             
 
         prevx = input
         # ngram used to be a parameter to this method.
         #lstcs = [[] for i in range(ngram)]
-
+        final_cs = []
         for i, rnn in enumerate(self.rnn_lst):
             h, cs = rnn(prevx, init_hidden[i])
+            final_cs.append(cs)
             #for j in range(len(cs)):
             #    lstcs[j].append(cs[j])
             prevx = self.ln_lst[i](h) if self.use_layer_norm else h
 
-        #stacked_lstcs = [torch.stack(lstcs[i]) for i in range(len(lstcs))]
-        stacked_lstcs = None
-            
+        # stacked_lstcs = [torch.stack(lstcs[i]) for i in range(len(lstcs))]
+        # stacked_lstcs = None
         if return_hidden:
-            return prevx, stacked_lstcs
+            return prevx, final_cs
         else:
             return prevx
                       

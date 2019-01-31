@@ -214,6 +214,12 @@ def repackage_hidden(args, hidden):
             return (Variable(hidden[0].data), Variable(hidden[1].data))
         elif args.pattern == "unigram":
             return Variable(hidden.data)
+        else:
+            for i, hss in enumerate(hidden):
+                for j, hs in enumerate(hss):
+                    for k, h in enumerate(hs):
+                        hidden[i][j][k] = Variable(hidden[i][j][k].data)
+            return hidden
     else:
         assert False
 
@@ -551,7 +557,7 @@ if __name__ == "__main__":
     argparser.add_argument("--use_rho", type=str2bool, default=False)
     argparser.add_argument("--use_layer_norm", type=str2bool, default=False)
     argparser.add_argument("--use_output_gate", type=str2bool, default=True)
-    argparser.add_argument("--activation", type=str, default="none")
+    argparser.add_argument("--activation", type=str, default="tanh")
     argparser.add_argument("--train", type=str, required=True, help="training file")
     argparser.add_argument("--dev", type=str, required=True, help="dev file")
     argparser.add_argument("--test", type=str, required=True, help="test file")
