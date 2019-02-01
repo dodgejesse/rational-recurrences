@@ -14,7 +14,7 @@ def main(argv):
                                 seed = argv.seed, loaded_embedding = loaded_embedding,
                                 dataset = argv.dataset, use_rho = False,
                                 depth = argv.depth, gpu=argv.gpu,
-                                batch_size=argv.batch_size,
+                                batch_size=argv.batch_size, use_last_cs=argv.use_last_cs,
                                 base_data_dir = argv.base_dir, input_model=argv.input_model)
     cur_train_err, cur_valid_err, cur_test_err = train_classifier.main_test(args)
 
