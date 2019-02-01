@@ -7,6 +7,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from termcolor import colored
+
 
 from tensorboardX import SummaryWriter
 
@@ -93,13 +95,15 @@ class Model(nn.Module):
 
             emb_fwd = self.emb_layer(input_fwd)
             emb_fwd = self.drop(emb_fwd)
-            out_fwd, hidden_fwd = self.encoder(emb_fwd)
+
+            out_fwd, hidden_fwd, _ = self.encoder(emb_fwd)
             batch, length = emb_fwd.size(-2), emb_fwd.size(0)
             out_fwd = out_fwd.view(length, batch, 1, -1)
             feat = out_fwd[-1,:,0,:]
         else:
             emb = self.emb_layer(input)
             emb = self.drop(emb)
+
             output, hidden = self.encoder(emb)
             batch, length = emb.size(-2), emb.size(0)
             output = output.view(length, batch, 1, -1)
@@ -108,6 +112,15 @@ class Model(nn.Module):
         feat = self.drop(feat)
         return self.out(feat)
 
+    # Assume rrnn model
+    def visualize(self, input):
+        assert self.args.model == "rrnn"
+        input_fwd = input
+        emb_fwd = self.emb_layer(input_fwd)
+#        emb_fwd = self.drop(emb_fwd)
+        _, _, traces = self.encoder(emb_fwd, None, True, True)
+
+        return traces
 
 def eval_model(niter, model, valid_x, valid_y):
     model.eval()
@@ -380,57 +393,161 @@ def train_model(epoch, model, optimizer,
     return best_valid, unchanged, stop
 
 
-def main_test(args):
-    if args.seed:
-        np.random.seed(args.seed)
-        torch.manual_seed(args.seed)
-    train_X, train_Y, valid_X, valid_Y, test_X, test_Y = dataloader.read_SST(args.path)
-    data = train_X + valid_X + test_X
+def main_visualize(args, dataset_file, top_k):
+    # datasets and labels are 3-size array: 0 - train, 1 - dev, 2 - test
+    model, datasets, labels, emb_layer = main_init(args)
 
-    if args.loaded_embedding:
-        embs = args.loaded_embedding
-    else:
-        embs = dataloader.load_embedding(args.embedding)
-    emb_layer = modules.EmbeddingLayer(
-        data,
-        fix_emb=args.fix_embedding,
+    model.eval()
+
+    # Creating dev batches
+    d, l, txt_batches = dataloader.create_batches(
+        datasets[1], labels[1],
+        args.batch_size,
+        emb_layer.word2id,
+        sort=True,
+        gpu=args.gpu,
         sos=SOS,
         eos=EOS,
-        embs=embs
+        get_text_batches=True
     )
 
-    nclasses = max(train_Y) + 1
-    random_perm = list(range(len(train_X)))
-    np.random.shuffle(random_perm)
-    train_x, train_y = dataloader.create_batches(
-        train_X, train_Y,
-        args.batch_size,
-        emb_layer.word2id,
-        sort=True,
-        gpu=args.gpu,
-        sos=SOS,
-        eos=EOS
-    )
-    valid_x, valid_y = dataloader.create_batches(
-        valid_X, valid_Y,
-        args.batch_size,
-        emb_layer.word2id,
-        sort=True,
-        gpu=args.gpu,
-        sos=SOS,
-        eos=EOS
-    )
-    test_x, test_y = dataloader.create_batches(
-        test_X, test_Y,
-        args.batch_size,
-        emb_layer.word2id,
-        sort=True,
-        gpu=args.gpu,
-        sos=SOS,
-        eos=EOS
-    )
+    # Loading trained model
+    if args.gpu:
+        state_dict = torch.load(args.input_model)
+    else:
+        state_dict = torch.load(args.input_model, map_location=lambda storage, loc: storage)
 
-    model = Model(args, emb_layer, nclasses)
+    model.load_state_dict(state_dict)
+
+    if args.gpu:
+        model.cuda()
+
+    #top_samples = torch.zeros(len(traces[0][0])), )
+
+    n_patts = [int(one_size) for one_size in args.d_out.split(",")]
+
+    patt_lengths = [int(patt_len[0]) for patt_len in args.pattern.split(",")]
+
+    # Filtering-out pattern lengths with 0 patterns
+    patt_lengths = [patt_lengths[i] for i in range(len(patt_lengths)) if n_patts[i] > 0 ]
+    n_patts = [n_patts[i] for i in range(len(n_patts)) if n_patts[i] > 0 ]
+
+    # Trace for each pattern in each pattern length
+    all_scores = [[] for i in n_patts]
+    all_traces = [[] for i in n_patts]
+
+    all_x = []
+
+    for x, txt_x in zip(d, txt_batches):
+        all_x.extend(txt_x)
+        # print(len(x[0]), len(txt_x))
+        assert(len(x[0]) == len(txt_x))
+
+        x = Variable(x)
+        if args.gpu:
+            x = x.cuda()
+        x = (x)
+
+        # traces shape: n-patterns lengths X length of pattern (for intermediate pattern score)
+        # each item in this matrix is a TraceElementParallel representing the traces of a batch of documents
+        # and all patterns of the given pattern length.
+        traces = model.visualize(x)
+
+        # Saving all scores and all indices of main path (u_indices)
+        for i in range(len(n_patts)):
+            if len(all_traces[i]) == 0:
+                for j in range(len(traces[i])):
+                    all_scores[i].append(traces[i][j].score)
+                    all_traces[i].append(traces[i][j].u_indices)
+            else:
+                for j in range(len(traces[i])):
+                    all_scores[i][j] = np.concatenate((all_scores[i][j], traces[i][j].score))
+                    all_traces[i][j] = np.concatenate((all_traces[i][j], traces[i][j].u_indices))
+
+    # loop one: pattern length
+    for (i, same_length_traces) in enumerate(all_traces):
+        print("\nPattern length {}".format(patt_lengths[i]))
+
+        # loop two: number of patterns of each length
+        for k in range(n_patts[i]):
+            print("\nPattern index {}\n".format(k))
+
+            # Loop three: top phrases of intermediate states for each pattern
+            for j in range(len(same_length_traces)):
+                print("\nSublength {}\n".format(j))
+
+                patt_traces = same_length_traces[j]
+
+                local_scores = all_scores[i][j][:, k]
+                local_traces = patt_traces[:, k, :]
+
+                # Sorting scores, traces and documents by the score.
+                local_top_traces = sorted(zip(local_scores, local_traces, all_x),
+                                          key=lambda pair: pair[0], reverse=True)[:top_k]
+
+                print_top_traces(local_top_traces, j+1)
+
+
+    sys.stdout.flush()
+
+
+# Print the top phrases for a given pattern
+# top_traces: triplets containing the scores, traces and documents for the top k matches
+# tmp_patt_len: the pattern length to print (if tracing only the first tokens of the pattern)
+def print_top_traces(top_traces, tmp_patt_len=None):
+    # A helper function: print a given phrase.
+    # Calls recursive function (print_rec) that prints a given state and all it self loops.
+    def print_traces(index, score, u_indices, doc, tmp_patt_len=None):
+        if tmp_patt_len is None:
+            tmp_patt_len = len(u_indices)
+
+        print("{}. {}.".format(index, u_indices[:tmp_patt_len]), end=' ')
+        print_rec(doc, 0, u_indices, tmp_patt_len)
+        print(float(score))
+
+    # Print words from one state
+    def print_rec(doc, u_index, u_indices, tmp_patt_len):
+        doc_index = u_indices[u_index]
+        print(colored(doc[doc_index], 'red'), end='_MP ')
+
+        u_index += 1
+
+        if u_index == tmp_patt_len:
+            return
+
+        doc_index += 1
+
+        while (doc_index < u_indices[u_index]):
+            print(doc[doc_index], end='_SL ')
+            doc_index += 1
+
+        print_rec(doc, u_index, u_indices, tmp_patt_len)
+
+    # each triplet is composed of [0] the pattern score
+    # [1] the pattern traces (i.e., the indices of the main paths in the given document)
+    # [2] the document itself
+    for (i, triplet) in enumerate(top_traces):
+        print_traces(i+1, triplet[0], triplet[1], triplet[2], tmp_patt_len)
+
+
+def main_test(args):
+    model, datasets, labels, emb_layer = main_init(args)
+
+    batched_datasets = []
+    batched_labels = []
+    for [dataset, label] in zip(datasets, labels):
+        d, l, _ = dataloader.create_batches(
+        dataset, label,
+        args.batch_size,
+        emb_layer.word2id,
+        sort=True,
+        gpu=args.gpu,
+        sos=SOS,
+        eos=EOS
+    )
+        batched_datasets.append(d)
+        batched_labels.append(l)
+
 
     if args.gpu:
         state_dict = torch.load(args.input_model)
@@ -443,33 +560,32 @@ def main_test(args):
         model.cuda()
 
 
-    train_err = eval_model(0, model, train_x, train_y)
-    valid_err = eval_model(0, model, valid_x, valid_y)
-    test_err = eval_model(0, model, test_x, test_y)
+    names = ['train', 'valid', 'test']
 
-    sys.stdout.write("train_err: {:.6f}\n".format(train_err))
-    sys.stdout.write("valid_err: {:.6f}\n".format(valid_err))
-    sys.stdout.write("test_err: {:.6f}\n".format(test_err))
+
+    errs = [eval_model(0, model, d, l) for [d,l] in zip(batched_datasets, batched_labels)]
+
+    for [name, err] in zip(names, errs):
+        sys.stdout.write("{}_err: {:.6f}\n".format(name, err))
+
     sys.stdout.flush()
-    return train_err, valid_err, test_err
+    return errs
 
-
-
-def main(args):
-
-    logging_file = init_logging(args)
+def main_init(args):
     if args.seed:
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
 
+
     if args.bert_embed:
         if not args.loaded_data:
-            train_X, train_Y, valid_X, valid_Y, test_X, _ = dataloader.read_bert(args.path)
+            train_X, train_Y, valid_X, valid_Y, test_X, test_Y = dataloader.read_bert(args.path)
         else:
-            train_X, train_Y, valid_X, valid_Y, test_X, _ = args.loaded_data
-        
+            train_X, train_Y, valid_X, valid_Y, test_X, test_Y = args.loaded_data
+
     else:
-        train_X, train_Y, valid_X, valid_Y, test_X, _ = dataloader.read_SST(args.path)
+        train_X, train_Y, valid_X, valid_Y, test_X, test_Y = dataloader.read_SST(args.path)
+
     data = train_X + valid_X + test_X
 
     if args.loaded_embedding:
@@ -489,11 +605,21 @@ def main(args):
     )
 
     nclasses = max(train_Y) + 1
-    random_perm = list(range(len(train_X)))
+
+    model = Model(args, emb_layer, nclasses)
+
+    return model, [train_X, valid_X, test_X], [train_Y, valid_Y, test_Y], emb_layer
+
+
+def main(args):
+    logging_file = init_logging(args)
+    model, datasets, labels, emb_layer = main_init(args)
+
+    random_perm = list(range(len(datasets[0])))
     np.random.shuffle(random_perm)
 
-    valid_x, valid_y = dataloader.create_batches(
-        valid_X, valid_Y,
+    valid_x, valid_y, _ = dataloader.create_batches(
+        datasets[1], labels[1],
         args.batch_size,
         emb_layer.word2id,
         sort=True,
@@ -502,8 +628,6 @@ def main(args):
         eos=EOS,
         bert_embed=args.bert_embed
     )
-
-    model = Model(args, emb_layer, nclasses)
 
     if args.gpu:
         model.cuda()
@@ -531,8 +655,8 @@ def main(args):
     for epoch in range(args.max_epoch):
         np.random.shuffle(random_perm)
 
-        train_x, train_y = dataloader.create_batches(
-            train_X, train_Y,
+        train_x, train_y, _ = dataloader.create_batches(
+            datasets[0], labels[0],
             args.batch_size,
             emb_layer.word2id,
             perm=random_perm,
@@ -571,6 +695,7 @@ def main(args):
         # if writer is not None:
         #     writer.add_scalar("loss/best_valid", best_valid, epoch)
 
+
         if stop:
             break
 
@@ -578,9 +703,6 @@ def main(args):
             optimizer.param_groups[0]["lr"] *= args.lr_decay
 
 
-    # if writer is not None:
-    #    writer.add_scalar("loss/best_valid", best_valid, epoch)
-    #    writer.close()
 
     sys.stdout.write("best_valid: {:.6f}\n".format(best_valid))
 #    sys.stdout.write("test_err: {:.6f}\n".format(test_err))

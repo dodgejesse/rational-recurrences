@@ -1,12 +1,63 @@
 import sys
 import torch
 import torch.nn as nn
+import numpy as np
 from torch.autograd import Variable
 
+NEG_INF = -10000000
 
 def RRNN_Ngram_Compute_CPU(d, ngram, semiring, bidirectional=False):
+    # Compute traces for n_patterns patterns and n_docs documents
+    class TraceElementParallel():
+        def __init__(self, f, u, prev_traces, i, t, n_patterns, n_docs):
+            self.u_indices = np.zeros((n_docs, n_patterns, int(ngram)), dtype=int)
 
-    def rrnn_compute_cpu(u, cs_init=None, eps=None):
+            # Lower triangle in dynamic programming table is impossible (i.e., -inf)
+            if t < i:
+                self.score = NEG_INF*np.ones((n_docs, n_patterns))
+                return
+
+            # Previous trace values
+            u_score = np.copy(u.data.numpy())
+            f_score = np.copy(f.data.numpy())
+
+            # If i > 0, including history in computation of u_score and u_indices
+            if i > 0:
+                prev_u_indices = prev_traces[i-1].u_indices
+                u_score *= prev_traces[i-1].score
+            else:
+                prev_u_indices = np.zeros((n_docs, n_patterns, int(ngram)), dtype=int)
+
+            # If t == i, we can't take a forget gate.
+            if t == i:
+                prev_f_indices = np.zeros((n_docs, n_patterns, int(ngram)), dtype=int)
+                f_score = NEG_INF * np.ones((n_docs, n_patterns))
+            # Otherwise, including history of forget gate.
+            else:
+                prev_f_indices = prev_traces[i].u_indices
+                f_score *= prev_traces[i].score
+
+            assert((not np.isnan(u_score).any()) and (not np.isnan(f_score).any()))
+
+            # Dynamic program selection
+            selected = u_score >= f_score
+            not_selected = 1 - selected
+
+            # Equivalent to np.maximum(u_score, f_score)
+            self.score = selected * u_score + not_selected * f_score
+
+            # A fancy way of selecting the previous indices based on the selection criterion above.
+            prevs = np.expand_dims(selected, 2) * prev_u_indices + \
+                    np.expand_dims(not_selected, 2) * prev_f_indices
+
+            # Updating u_indices with history (deep copy!)
+            self.u_indices[:, :, :i+1] = np.copy(prevs[:, :, :i+1])
+
+            # In the cases where u was selected, updating u_indices with current time step.
+            self.u_indices[selected, i] = t
+
+
+    def rrnn_compute_cpu(u, cs_init=None, eps=None, keep_trace=False):
         assert eps is None, "haven't implemented epsilon steps with arbitrary n-grams. Please set command line param to False."
         bidir = 2 if bidirectional else 1
         assert u.size(-1) == ngram * 2
@@ -22,9 +73,14 @@ def RRNN_Ngram_Compute_CPU(d, ngram, semiring, bidirectional=False):
         for i in range(ngram, ngram*2):
             forgets.append(u[..., i])
 
-        cs_final = [[] for i in range(ngram)]
+        cs_final = None
+        css = None
+        all_traces = None
 
-        css = [Variable(u.data.new(length, batch, bidir, d)) for i in range(ngram)]
+        if not keep_trace:
+            cs_final = [[] for i in range(ngram)]
+
+            css = [Variable(u.data.new(length, batch, bidir, d)) for i in range(ngram)]
 
         for di in range(bidir):
             if di == 0:
@@ -32,29 +88,54 @@ def RRNN_Ngram_Compute_CPU(d, ngram, semiring, bidirectional=False):
             else:
                 time_seq = range(length - 1, -1, -1)
 
-            cs_prev = [cs_init[i][:, di, :] for i in range(len(cs_init))]
+            if keep_trace:
+                prev_traces = [None for i in range(len(cs_init))]
+            else:
+                cs_prev = [cs_init[i][:, di, :] for i in range(len(cs_init))]
 
+            # input
             for t in time_seq:
-                cs_t = []
-                for i in range(len(cs_prev)):
-                    first_term = cs_prev[i] * forgets[i][t, :, di, :]
-                    second_term = us[i][t, :, di, :]
-                    if i > 0:
-                        second_term = second_term * cs_prev[i-1]
-                    cs_t.append(first_term + second_term)
+                # ind = 0
+                if keep_trace:
+                    # Traces of all pattern states in current time step
+                    all_traces = []
+                else:
+                    cs_t = []
 
-                cs_prev = cs_t
+                # States of pattern
+                for i in range(len(cs_init)):
+                    if keep_trace:
+                        all_traces.append(
+                            TraceElementParallel(forgets[i][t, :, di, :], us[i][t, :, di, :], prev_traces, i, t,
+                                                 us[i].size()[3], u.size()[1])
+                        )
+                    else:
+                        first_term = cs_prev[i] * forgets[i][t, :, di, :]
+                        second_term = us[i][t, :, di, :]
+
+                        if i > 0:
+                            second_term = second_term * cs_prev[i-1]
+
+                        cs_t.append(first_term + second_term)
+
+
+                if keep_trace:
+                    prev_traces = all_traces
+                else:
+                    cs_prev = cs_t
                 
+                    for i in range(len(cs_prev)):
+                        css[i][t,:,di,:] = cs_t[i]
+
+            if not keep_trace:
                 for i in range(len(cs_prev)):
-                    css[i][t,:,di,:] = cs_t[i]
+                    cs_final[i].append(cs_t[i])
 
-            for i in range(len(cs_prev)):
-                cs_final[i].append(cs_t[i])
+        if not keep_trace:
+            for i in range(len(cs_final)):
+                cs_final[i] = torch.stack(cs_final[i], dim=1).view(batch, -1)
 
-        for i in range(len(cs_final)):
-            cs_final[i] = torch.stack(cs_final[i], dim=1).view(batch, -1)
-        
-        return css, cs_final
+        return css, cs_final, all_traces
     if semiring.type == 0:
         # plus times
         return rrnn_compute_cpu
@@ -527,7 +608,7 @@ class RRNNCell(nn.Module):
 
         return gcs.view(length, batch, -1), c_final
 
-    def real_ngram_forward(self, input, init_hidden=None):
+    def real_ngram_forward(self, input, init_hidden=None, keep_trace=False):
         assert input.dim() == 3
         n_in, n_out = self.n_in, self.n_out
         length, batch = input.size(0), input.size(-2)
@@ -606,8 +687,11 @@ class RRNNCell(nn.Module):
                 assert False, "custom cuda kernel only implemented for 1,2,3,4-gram models"                
         else:
             RRNN_Compute = RRNN_Ngram_Compute_CPU(n_out, self.ngram, self.semiring, self.bidirectional)
-            css, cs_final = RRNN_Compute(u, cs_init, eps=None)
 
+            css, cs_final, traces  = RRNN_Compute(u, cs_init, eps=None, keep_trace=keep_trace)
+
+        if keep_trace:
+            return None, None, traces
 
         # instead of using \rho to weight the sum, we can give uniform weight. this might be
         # more interpretable, as the \rhos might counteract the regularization terms
@@ -637,10 +721,11 @@ class RRNNCell(nn.Module):
             gcs = self.calc_activation(output*cs)
         else:
             gcs = self.calc_activation(cs)
-        return gcs.view(length, batch, -1), cs_final
+
+        return gcs.view(length, batch, -1), cs_final, traces
 
     
-    def forward(self, input, init_hidden=None):
+    def forward(self, input, init_hidden=None, keep_trace=False):
 
         if self.semiring.type == 0:
             # plus times
@@ -650,7 +735,7 @@ class RRNNCell(nn.Module):
                 return self.real_unigram_forward(input=input, init_hidden=init_hidden)
             else:
                 # it should be of the form "4-gram"
-                return self.real_ngram_forward(input=input, init_hidden=init_hidden)
+                return self.real_ngram_forward(input=input, init_hidden=init_hidden, keep_trace=keep_trace)
                 
         else:
             assert False, "not implemented yet."
@@ -716,22 +801,34 @@ class RRNNLayer(nn.Module):
         for cell in self.cells:
             cell.init_weights()
             
-    def forward(self, input, init_hidden=None):
+    def forward(self, input, init_hidden=None, keep_trace=False):
         #import pdb; pdb.set_trace()
         cs_finals = []
-        gcs, cs_final = self.cells[0](input, init_hidden[0] if init_hidden else None)
-        cs_finals.append(cs_final)
+        all_traces = []
+
+        gcs, cs_final, traces = self.cells[0](input, init_hidden[0] if init_hidden else None, keep_trace)
+
+        if keep_trace:
+            # An array where each element is the traces for all the patterns of one pattern length.
+
+            all_traces.append(traces)
+        else:
+            cs_finals.append(cs_final)
+
         for i, cell in enumerate(self.cells):
             if i == 0:
                 continue
             else:
-                gcs_cur, cs_final= cell(input, init_hidden[i] if init_hidden else None)
-                gcs = torch.cat((gcs, gcs_cur), 2)
-                #for j in range(len(cs_final)):
-                #    cs_final[j] = torch.cat((cs_final[j], cs_final_cur[j]), 1)
-                cs_finals.append(cs_final)
-        return gcs, cs_finals
-    
+                gcs_cur, cs_final, traces = cell(input, init_hidden[i] if init_hidden else None, keep_trace)
+
+                if keep_trace:
+                    all_traces.append(traces)
+                else:
+                    gcs = torch.cat((gcs, gcs_cur), 2)
+                    cs_finals.append(cs_final)
+
+        return gcs, cs_finals, all_traces
+
         
 class RRNN(nn.Module):
     def __init__(self,
@@ -855,7 +952,7 @@ class RRNN(nn.Module):
 
 
 
-    def ngram_forward(self, input, init_hidden=None, return_hidden=True):
+    def ngram_forward(self, input, init_hidden=None, return_hidden=True, keep_trace=False):
         assert input.dim() == 3  # (len, batch, n_in)
         if init_hidden is None:
             init_hidden = [None for _ in range(self.num_layers)]
@@ -875,21 +972,25 @@ class RRNN(nn.Module):
         # ngram used to be a parameter to this method.
         #lstcs = [[] for i in range(ngram)]
         final_cs = []
-        for i, rnn in enumerate(self.rnn_lst):
-            h, cs = rnn(prevx, init_hidden[i])
-            final_cs.append(cs)
-            #for j in range(len(cs)):
-            #    lstcs[j].append(cs[j])
-            prevx = self.ln_lst[i](h) if self.use_layer_norm else h
+        first_traces = None
 
-        # stacked_lstcs = [torch.stack(lstcs[i]) for i in range(len(lstcs))]
-        # stacked_lstcs = None
+        for i, rnn in enumerate(self.rnn_lst):
+            h, cs, traces = rnn(prevx, init_hidden[i], keep_trace)
+
+            # Only visualize first layer
+            if keep_trace:
+                if i == 0:
+                    first_traces = traces
+            else:
+                final_cs.append(cs)
+                prevx = self.ln_lst[i](h) if self.use_layer_norm else h
+
         if return_hidden:
-            return prevx, final_cs
+            return prevx, final_cs, first_traces
         else:
-            return prevx
+            return prevx, None, first_traces
                       
-    def forward(self, input, init_hidden=None, return_hidden=True):
+    def forward(self, input, init_hidden=None, return_hidden=True, keep_trace=False):
         if self.pattern == "unigram":
             return self.unigram_forward(input, init_hidden, return_hidden)
         elif self.pattern == "bigram":
@@ -897,7 +998,7 @@ class RRNN(nn.Module):
         else:
             # it should be of the form "4-gram"
             #ngram = int(self.pattern.split("-")[0])
-            return self.ngram_forward(input, init_hidden, return_hidden)
+            return self.ngram_forward(input, init_hidden, return_hidden, keep_trace=keep_trace)
 
 
 class LayerNorm(nn.Module):
