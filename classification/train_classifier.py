@@ -553,6 +553,11 @@ def main(args):
             unchanged, scheduler, logging_file
         )
 
+        if unchanged == 0 and args.output_dir is not None:
+            of = os.path.join(args.output_dir, "best_model.pth")
+            print("Writing model to", of)
+            torch.save(model.state_dict(), of)
+
         # if writer is not None:
         #     for name, param in model.named_parameters():
         #         writer.add_scalar("parameter_mean/" + name,
@@ -579,12 +584,6 @@ def main(args):
     # if writer is not None:
     #    writer.add_scalar("loss/best_valid", best_valid, epoch)
     #    writer.close()
-
-    if args.output_dir is not None:
-        of = os.path.join(args.output_dir, "best_model.pth")
-        print("Writing model to", of)
-        torch.save(model.state_dict(), of)
-
 
     sys.stdout.write("best_valid: {:.6f}\n".format(best_valid))
 #    sys.stdout.write("test_err: {:.6f}\n".format(test_err))
