@@ -106,7 +106,7 @@ class Model(nn.Module):
             self.rnn = rrnn.RRNN(
                 self.semiring,
                 self.n_d,
-                self.n_d,
+                args.hidden_size,
                 self.depth,
                 pattern=args.pattern,
                 dropout=args.dropout,
@@ -138,7 +138,8 @@ class Model(nn.Module):
         args = self.args
         sosid = self.embedding_layer.sosid
         init_input = torch.from_numpy(np.array(
-            [sosid] * batch_size, dtype=np.int64).reshape(1, batch_size))
+            [sosid, sosid, sosid, sosid] * batch_size, dtype=np.int64).reshape(4, batch_size))
+
         if args.gpu:
             init_input = init_input.cuda()
         return Variable(init_input)
@@ -213,6 +214,12 @@ def repackage_hidden(args, hidden):
             return (Variable(hidden[0].data), Variable(hidden[1].data))
         elif args.pattern == "unigram":
             return Variable(hidden.data)
+        else:
+            for i, hss in enumerate(hidden):
+                for j, hs in enumerate(hss):
+                    for k, h in enumerate(hs):
+                        hidden[i][j][k] = Variable(hidden[i][j][k].data)
+            return hidden
     else:
         assert False
 
@@ -356,6 +363,159 @@ def eval_model(model, valid):
     return ppl
 
 
+def get_states_weights(model, args):
+    embed_dim = model.emb_layer.n_d
+    num_edges_in_wfsa = model.encoder.rnn_lst[0].cells[0].k
+    num_wfsas = int(args.d_out)
+
+    reshaped_weights = model.encoder.rnn_lst[0].cells[0].weight.view(embed_dim, num_wfsas, num_edges_in_wfsa)
+    if len(model.encoder.rnn_lst) > 1:
+        reshaped_second_layer_weights = model.encoder.rnn_lst[1].cells[0].weight.view(num_wfsas, num_wfsas,
+                                                                                      num_edges_in_wfsa)
+        reshaped_weights = torch.cat((reshaped_weights, reshaped_second_layer_weights), 0)
+    elif len(model.encoder.rnn_lst) > 2:
+        assert False, "This regularization is only implemented for 2-layer networks."
+
+    # to stack the transition and self-loops, so e.g. states[...,0] contains the transition and self-loop weights
+
+    states = torch.cat((reshaped_weights[..., 0:int(num_edges_in_wfsa / 2)],
+                        reshaped_weights[..., int(num_edges_in_wfsa / 2):num_edges_in_wfsa]), 0)
+    return states
+
+
+# this computes the group lasso penalty term
+def get_regularization_groups(model, args):
+    if args.sparsity_type == "wfsa":
+        embed_dim = model.emb_layer.n_d
+        num_edges_in_wfsa = model.encoder.rnn_lst[0].k
+        reshaped_weights = model.encoder.rnn_lst[0].weight.view(embed_dim, args.d_out, num_edges_in_wfsa)
+        l2_norm = reshaped_weights.norm(2, dim=0).norm(2, dim=1)
+        return l2_norm
+    elif args.sparsity_type == 'edges':
+        return model.encoder.rnn_lst[0].weight.norm(2, dim=0)
+    elif args.sparsity_type == 'states':
+        states = get_states_weights(model, args)
+        return states.norm(2, dim=0)  # a num_wfsa by n-gram matrix
+    elif args.sparsity_type == "rho_entropy":
+        assert args.depth == 1, "rho_entropy regularization currently implemented for single layer networks"
+        bidirectional = model.encoder.rnn_lst[0].cells[0].bidirectional
+        assert not bidirectional, "bidirectional not implemented"
+
+        num_edges_in_wfsa = model.encoder.rnn_lst[0].cells[0].k
+        num_wfsas = int(args.d_out)
+        bias_final = model.encoder.rnn_lst[0].cells[0].bias_final
+
+        sm = nn.Softmax(dim=2)
+        # the 1 in the line below is for non-bidirectional models, would be 2 for bidirectional
+        rho = sm(bias_final.view(1, num_wfsas, int(num_edges_in_wfsa / 2)))
+        entropy_to_sum = rho * rho.log() * -1
+        entropy = entropy_to_sum.sum(dim=2)
+        return entropy
+
+
+def log_groups(model, args, logging_file, groups=None):
+    if groups is not None:
+
+        if args.sparsity_type == "rho_entropy":
+            num_edges_in_wfsa = model.encoder.rnn_lst[0].cells[0].k
+            num_wfsas = int(args.d_out)
+            bias_final = model.encoder.rnn_lst[0].cells[0].bias_final
+
+            sm = nn.Softmax(dim=2)
+            # the 1 in the line below is for non-bidirectional models, would be 2 for bidirectional
+            rho = sm(bias_final.view(1, num_wfsas, int(num_edges_in_wfsa / 2)))
+            logging_file.write(str(rho))
+
+        else:
+            logging_file.write(str(groups))
+    else:
+        if args.sparsity_type == "wfsa":
+            embed_dim = model.emb_layer.n_d
+            num_edges_in_wfsa = model.encoder.rnn_lst[0].k
+            reshaped_weights = model.encoder.rnn_lst[0].weight.view(embed_dim, args.d_out, num_edges_in_wfsa)
+            l2_norm = reshaped_weights.norm(2, dim=0).norm(2, dim=1)
+            logging_file.write(str(l2_norm))
+
+        elif args.sparsity_type == 'edges':
+            embed_dim = model.emb_layer.n_d
+            num_edges_in_wfsa = model.encoder.rnn_lst[0].k
+            reshaped_weights = model.encoder.rnn_lst[0].weight.view(embed_dim, args.d_out, num_edges_in_wfsa)
+            logging_file.write(str(reshaped_weights.norm(2, dim=0)))
+            # model.encoder.rnn_lst[0].weight.norm(2, dim=0)
+        elif args.sparsity_type == 'states':
+            assert False, "can implement this based on get_regularization_groups, but that keeps changing"
+            logging_file.write(str(states.norm(2, dim=0)))  # a num_wfsa by n-gram matrix
+
+
+def init_logging(args):
+    dir_path = "/home/jessedd/projects/rational-recurrences/classification/logging/" + args.dataset + "/"
+    filename = args.filename() + ".txt"
+
+    if not os.path.exists(dir_path):
+        os.mkdir(dir_path)
+
+    if not os.path.exists(dir_path + args.filename_prefix):
+        os.mkdir(dir_path + args.filename_prefix)
+
+    torch.set_printoptions(threshold=5000)
+
+    logging_file = open(dir_path + filename, "w")
+
+    tmp = args.loaded_embedding
+    args.loaded_embedding = True
+    logging_file.write(str(args))
+    args.loaded_embedding = tmp
+
+    # print(args)
+    print("saving in {}".format(args.dataset + args.filename()))
+    return logging_file
+
+
+def regularization_stop(args, model):
+    if args.sparsity_type == "states" and args.prox_step:
+        states = get_states_weights(model, args)
+        if states.norm(2, dim=0).sum().data[0] == 0:
+            return True
+    else:
+        return False
+
+
+# following https://en.wikipedia.org/wiki/Proximal_gradient_methods_for_learning#Group_lasso
+# w_g - args.reg_strength * (w_g / ||w_g||_2)
+def prox_step(model, args):
+    if args.sparsity_type == "states":
+
+        states = get_states_weights(model, args)
+        num_states = states.shape[2]
+
+        embed_dim = model.emb_layer.n_d
+        num_edges_in_wfsa = model.encoder.rnn_lst[0].cells[0].k
+        num_wfsas = int(args.d_out)
+
+        reshaped_weights = model.encoder.rnn_lst[0].cells[0].weight.view(embed_dim, num_wfsas, num_edges_in_wfsa)
+        if len(model.encoder.rnn_lst) > 1:
+            assert False, "This regularization is only implemented for 2-layer networks."
+
+        first_weights = reshaped_weights[..., 0:int(num_edges_in_wfsa / 2)]
+        second_weights = reshaped_weights[..., int(num_edges_in_wfsa / 2):num_edges_in_wfsa]
+
+        for i in range(num_wfsas):
+            for j in range(num_states):
+                cur_group = states[:, i, j].data
+                cur_first_weights = first_weights[:, i, j].data
+                cur_second_weights = second_weights[:, i, j].data
+                if cur_group.norm(2) < args.reg_strength:
+                    # cur_group.add_(-cur_group)
+                    cur_first_weights.add_(-cur_first_weights)
+                    cur_second_weights.add_(-cur_second_weights)
+                else:
+                    # cur_group.add_(-args.reg_strength*cur_group/cur_group.norm(2))
+                    cur_first_weights.add_(-args.reg_strength * cur_first_weights / cur_group.norm(2))
+                    cur_second_weights.add_(-args.reg_strength * cur_second_weights / cur_group.norm(2))
+    else:
+        assert False, "haven't implemented anything else"
+
+
 def main(args):
     torch.manual_seed(args.seed)
     train = read_corpus(args.train, shuffle=False)
@@ -366,9 +526,9 @@ def main(args):
         model.embedding_layer.n_V
     ))
     num_params = sum(x.numel() for x in model.parameters() if x.requires_grad)
-    if args.model == "rrnn":
-        num_in = args.depth * (2 * args.d)
-        num_params = num_params - num_in
+    # if args.model == "rrnn":
+        # num_in = args.depth * (2 * args.d)
+        # num_params = num_params - num_in
     
     sys.stdout.write("num of parameters: {}\n".format(num_params))
     sys.stdout.flush()
@@ -393,28 +553,30 @@ if __name__ == "__main__":
     argparser.add_argument("--seed", type=int, default=31415)
     argparser.add_argument("--model", type=str, default="rrnn")
     argparser.add_argument("--semiring", type=str, default="plus_times")
-    argparser.add_argument("--pattern", type=str, default="unigram")
+    argparser.add_argument("--pattern", type=str, default="1-gram,2-gram,3-gram,4-gram")
+    argparser.add_argument("--use_rho", type=str2bool, default=False)
     argparser.add_argument("--use_layer_norm", type=str2bool, default=False)
-    argparser.add_argument("--use_output_gate", type=str2bool, default=False)
-    argparser.add_argument("--activation", type=str, default="none")
+    argparser.add_argument("--use_output_gate", type=str2bool, default=True)
+    argparser.add_argument("--activation", type=str, default="tanh")
     argparser.add_argument("--train", type=str, required=True, help="training file")
     argparser.add_argument("--dev", type=str, required=True, help="dev file")
     argparser.add_argument("--test", type=str, required=True, help="test file")
     argparser.add_argument("--batch_size", "--batch", type=int, default=32)
     argparser.add_argument("--unroll_size", type=int, default=35)
     argparser.add_argument("--max_epoch", type=int, default=300)
-    argparser.add_argument("--d", type=int, default=512)
-    argparser.add_argument("--input_dropout", type=float, default=0.5,
+    argparser.add_argument("--d", type=int, default=32)
+    argparser.add_argument("--hidden_size", type=str, default="8,8,8,8")
+    argparser.add_argument("--input_dropout", type=float, default=0.0,
         help="dropout of word embeddings")
-    argparser.add_argument("--output_dropout", type=float, default=0.5,
+    argparser.add_argument("--output_dropout", type=float, default=0.0,
         help="dropout of softmax output")
-    argparser.add_argument("--dropout", type=float, default=0.2,
+    argparser.add_argument("--dropout", type=float, default=0.0,
         help="dropout intra RNN layers")
-    argparser.add_argument("--rnn_dropout", type=float, default=0.2,
+    argparser.add_argument("--rnn_dropout", type=float, default=0.0,
         help="dropout of RNN layers")
-    argparser.add_argument("--depth", type=int, default=3)
+    argparser.add_argument("--depth", type=int, default=2)
     argparser.add_argument("--num_mlp_layer", type=int, default=1)
-    argparser.add_argument("--lr", type=float, default=1e-3)
+    argparser.add_argument("--lr", type=float, default=1.0)
     argparser.add_argument("--lr_decay", type=float, default=0.98)
     argparser.add_argument("--lr_decay_epoch", type=int, default=0)
     argparser.add_argument("--weight_decay", type=float, default=1e-6)

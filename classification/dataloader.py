@@ -3,6 +3,7 @@ import os
 import sys
 import re
 import random
+import json
 
 import numpy as np
 import torch
@@ -105,6 +106,33 @@ def read_SST(path, seed=1234):
     train_y = [ train_y[i] for i in perm ]
     return train_x, train_y, valid_x, valid_y, test_x, test_y
 
+# to read a dataset preprocessed with bert embeddings.
+def read_bert(path, seed=1234):
+    train_path = os.path.join(path, "train_bert")
+    valid_path = os.path.join(path, "dev_bert")
+    test_path = os.path.join(path, "test_bert")
+    train_x, train_y = read_bert_file(train_path)
+    valid_x, valid_y = read_bert_file(valid_path)
+    test_x, test_y = read_bert_file(test_path)
+    random.seed(seed)
+    perm = list(range(len(train_x)))
+    random.shuffle(perm)
+    train_x = [ train_x[i] for i in perm ]
+    train_y = [ train_y[i] for i in perm ]
+    return train_x, train_y, valid_x, valid_y, test_x, test_y
+
+def read_bert_file(path):
+    data = []
+    labels = []
+    with open(path) as fin:
+        for line in fin:
+            label, embeds_string = line.split('\t')
+            label = int(label)
+            embeds = json.loads(embeds_string)
+            labels.append(label)
+            data.append(embeds)
+    return data, labels
+
 def cv_split(data, labels, nfold, test_id):
     assert (nfold > 1) and (test_id >= 0) and (test_id < nfold)
     lst_x = [ x for i, x in enumerate(data) if i%nfold != test_id ]
@@ -172,16 +200,36 @@ def create_one_batch(x, y, map2id, oov='<oov>', gpu=False,
         return (x_fwd, x_bwd), y
     return (x_fwd), y
 
+# assumes we pad on the left, with zero padding.
+def pad_bert(sequences):
+    padding = [0.0] * len(sequences[0][0])
+    max_len = max(5,max(len(seq) for seq in sequences))
+    return [ [padding]*(max_len-len(seq)) + seq for seq in sequences ]
+
+
+def create_one_batch_bert(x, y, gpu=False):
+    x_fwd = pad_bert(x)
+    length = len(x_fwd[0])
+    batch_size = len(x_fwd)
+    x_fwd = [ w for seq in x_fwd for w in seq ]
+    x_fwd = torch.Tensor(x_fwd)
+    assert x_fwd.size(0) == length*batch_size
+    x_fwd, y = x_fwd.view(batch_size, length, x_fwd.size(1)).permute(1,0,2).contiguous(), torch.LongTensor(y)
+    if gpu:
+        x_fwd, y = x_fwd.cuda(), y.cuda()
+    return (x_fwd), y
+
 
 # shuffle training examples and create mini-batches
 def create_batches(x, y, batch_size, map2id, perm=None, sort=False, gpu=False,
-                   sos=None, eos=None, bidirectional=False):
+                   sos=None, eos=None, bidirectional=False, bert_embed=False):
 
     lst = perm or list(range(len(x)))
     # sort sequences based on their length; necessary for SST
     if sort:
         lst = sorted(lst, key=lambda i: len(x[i]))
 
+    # reordering based on lst
     x = [ x[i] for i in lst ]
     y = [ y[i] for i in lst ]
 
@@ -191,8 +239,11 @@ def create_batches(x, y, batch_size, map2id, perm=None, sort=False, gpu=False,
     size = batch_size
     nbatch = (len(x)-1) // size + 1
     for i in range(nbatch):
-        bx, by = create_one_batch(x[i*size:(i+1)*size], y[i*size:(i+1)*size],
-                                  map2id, gpu=gpu, sos=sos, eos=eos, bidirectional=bidirectional)
+        if not bert_embed:
+            bx, by = create_one_batch(x[i*size:(i+1)*size], y[i*size:(i+1)*size],
+                                      map2id, gpu=gpu, sos=sos, eos=eos, bidirectional=bidirectional)
+        else:
+            bx, by = create_one_batch_bert(x[i*size:(i+1)*size], y[i*size:(i+1)*size], gpu=gpu)
         sum_len += len(bx[0])
         batches_x.append(bx)
         batches_y.append(by)

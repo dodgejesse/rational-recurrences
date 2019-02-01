@@ -33,9 +33,16 @@ class CNN_Text(nn.Module):
 
 class EmbeddingLayer(nn.Module):
     def __init__(self, words, embs=None, fix_emb=True, sos='<s>', eos='</s>',
-                 oov='<oov>', pad='<pad>', normalize=True):
+                 oov='<oov>', pad='<pad>', normalize=True, bert_embed=False):
         super(EmbeddingLayer, self).__init__()
         word2id = {}
+
+        self.bert_embed = bert_embed
+        if bert_embed:
+            self.word2id = None
+            self.n_d = len(words[0][0])
+            return
+        
         if embs is not None:
             embwords, embvecs = embs
             for word in embwords:
@@ -81,4 +88,7 @@ class EmbeddingLayer(nn.Module):
             self.embedding.weight.requires_grad = False
 
     def forward(self, input):
-        return self.embedding(input)
+        if self.bert_embed:
+            return input
+        else:
+            return self.embedding(input)

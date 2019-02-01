@@ -90,6 +90,7 @@ class Model(nn.Module):
     def forward(self, input):
         if self.args.model == "rrnn":
             input_fwd = input
+
             emb_fwd = self.emb_layer(input_fwd)
             emb_fwd = self.drop(emb_fwd)
             out_fwd, hidden_fwd = self.encoder(emb_fwd)
@@ -230,10 +231,14 @@ def init_logging(args):
         
     logging_file = open(dir_path + filename, "w")
 
-    tmp = args.loaded_embedding
+    # to save args (without the pre-loaded data or embeddings)
+    tmp_embed = args.loaded_embedding
+    tmp_data = args.loaded_data
     args.loaded_embedding=True
+    args.loaded_data = True
     logging_file.write(str(args))
-    args.loaded_embedding = tmp
+    args.loaded_embedding = tmp_embed
+    args.loaded_data = tmp_data
     
     #print(args)
     print("saving in {}".format(args.dataset + args.filename()))
@@ -435,9 +440,6 @@ def main_test(args):
     model.load_state_dict(state_dict)
 
     if args.gpu:
-        model.to_cuda(model)
-
-    if args.gpu:
         model.cuda()
 
 
@@ -454,28 +456,42 @@ def main_test(args):
 
 
 def main(args):
+
     logging_file = init_logging(args)
     if args.seed:
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
-    train_X, train_Y, valid_X, valid_Y, test_X, _ = dataloader.read_SST(args.path)
+
+    if args.bert_embed:
+        if not args.loaded_data:
+            train_X, train_Y, valid_X, valid_Y, test_X, _ = dataloader.read_bert(args.path)
+        else:
+            train_X, train_Y, valid_X, valid_Y, test_X, _ = args.loaded_data
+        
+    else:
+        train_X, train_Y, valid_X, valid_Y, test_X, _ = dataloader.read_SST(args.path)
     data = train_X + valid_X + test_X
 
     if args.loaded_embedding:
         embs = args.loaded_embedding
+    elif args.bert_embed:
+        embs = None
     else:
         embs = dataloader.load_embedding(args.embedding)
+
     emb_layer = modules.EmbeddingLayer(
         data,
         fix_emb=args.fix_embedding,
         sos=SOS,
         eos=EOS,
-        embs=embs
+        embs=embs,
+        bert_embed=args.bert_embed
     )
 
     nclasses = max(train_Y) + 1
     random_perm = list(range(len(train_X)))
     np.random.shuffle(random_perm)
+
     valid_x, valid_y = dataloader.create_batches(
         valid_X, valid_Y,
         args.batch_size,
@@ -483,7 +499,8 @@ def main(args):
         sort=True,
         gpu=args.gpu,
         sos=SOS,
-        eos=EOS
+        eos=EOS,
+        bert_embed=args.bert_embed
     )
 
     model = Model(args, emb_layer, nclasses)
@@ -511,9 +528,9 @@ def main(args):
     best_valid = 1e+8
     unchanged = 0
 
-
     for epoch in range(args.max_epoch):
         np.random.shuffle(random_perm)
+
         train_x, train_y = dataloader.create_batches(
             train_X, train_Y,
             args.batch_size,
@@ -522,7 +539,8 @@ def main(args):
             sort=True,
             gpu=args.gpu,
             sos=SOS,
-            eos=EOS
+            eos=EOS,
+            bert_embed=args.bert_embed
         )
         best_valid, unchanged, stop = train_model(
             epoch, model, optimizer,
@@ -531,6 +549,11 @@ def main(args):
             best_valid,
             unchanged, scheduler, logging_file
         )
+
+        if unchanged == 0 and args.output_dir is not None:
+            of = os.path.join(args.output_dir, "best_model.pth")
+            print("Writing model to", of)
+            torch.save(model.state_dict(), of)
 
         # if writer is not None:
         #     for name, param in model.named_parameters():
@@ -558,12 +581,6 @@ def main(args):
     # if writer is not None:
     #    writer.add_scalar("loss/best_valid", best_valid, epoch)
     #    writer.close()
-
-    if args.output_dir is not None:
-        of = os.path.join(args.output_dir, "best_model.pth")
-        print("Writing model to", of)
-        torch.save(model.state_dict(), of)
-
 
     sys.stdout.write("best_valid: {:.6f}\n".format(best_valid))
 #    sys.stdout.write("test_err: {:.6f}\n".format(test_err))

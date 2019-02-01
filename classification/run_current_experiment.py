@@ -6,14 +6,48 @@ import regularization_search_experiments
 
 
 def main():
-    loaded_embedding = preload_embed()
-    
-    exp_num = 10
 
+    
+    exp_num = -2
+
+
+    if exp_num >= 0:
+        loaded_embedding = preload_embed()
+    else:
+        loaded_data = preload_data()
+    
     start_time = time.time()
     counter = [0]
     categories = get_categories()
-    
+
+
+    if exp_num == -2:
+        patterns = ["4-gram", "3-gram", "2-gram", "1-gram"]
+        m = 20
+        n = 5
+        total_evals = (m + n) * len(patterns)
+        for pattern in patterns:
+            train_m_then_n_models(m,n,counter, total_evals, start_time,
+                                  pattern = pattern, d_out = "24", depth = 1,
+                                  filename_prefix="all_cs_and_equal_rho/hparam_opt/",
+                                  dataset = "bert/sst/", use_rho = False, seed=None,
+                                  bert_embed = True, batch_size = 3, max_epoch=2,loaded_data = loaded_data)
+        
+        
+
+    # this never got better than about 45% accuracy, might need hparam tuning
+    if exp_num == -1:
+        loaded_data = preload_data()
+        args = ExperimentParams(pattern = "1-gram,2-gram,3-gram,4-gram", d_out = "0,4,0,2",
+                                learned_structure = "l1-states-learned", reg_goal_params = 20,
+                                filename_prefix="all_cs_and_equal_rho/saving_model_for_interpretability/",
+                                seed = None, loaded_embedding = None,
+                                dataset = "bert/sst/", use_rho = False,
+                                clip_grad = 1.09, dropout = 0.1943, rnn_dropout = 0.0805, embed_dropout = 0.3489,
+                                lr = 2.553E-02, weight_decay = 1.64E-06, depth = 1, bert_embed = True, batch_size=5,
+                                loaded_data = loaded_data)
+        cur_valid_err = train_classifier.main(args)
+
     
     # a basic experiment
     if exp_num == 0:
@@ -141,6 +175,18 @@ def main():
                               dataset = "sst/", use_rho = False, seed=None,
                               loaded_embedding = loaded_embedding)
 
+    elif exp_num == 11:
+
+        args = ExperimentParams(pattern = "1-gram,2-gram,3-gram,4-gram", d_out = "0,4,0,2",
+                                learned_structure = "l1-states-learned", reg_goal_params = 20,
+                                filename_prefix="all_cs_and_equal_rho/saving_model_for_interpretability/",
+                                seed = None, loaded_embedding = loaded_embedding,
+                                dataset = "amazon_categories/original_mix/", use_rho = False,
+                                clip_grad = 1.09, dropout = 0.1943, rnn_dropout = 0.0805, embed_dropout = 0.3489,
+                                lr = 2.553E-02, weight_decay = 1.64E-06, depth = 1, batch_size=5)
+        cur_valid_err, cur_test_err = train_classifier.main(args)
+        
+
 
 def preload_embed():
     start = time.time()
@@ -151,9 +197,18 @@ def preload_embed():
     print("")
     return embs
 
+def preload_data():
+    start = time.time()
+    import dataloader
+    data =  dataloader.read_bert("/home/jessedd/data/bert/sst/")
+    print("took {} seconds".format(time.time()-start))
+    print("preloaded bert embeddings for sst.")
+    print("")
+    return data
+
 # hparams to search over (from paper):
 # clip_grad, dropout, learning rate, rnn_dropout, embed_dropout, l2 regularization (actually weight decay)
-def hparam_sample(lr_bounds = [1.5, 10**-3]):
+def hparam_sample(lr_bounds):
     assignments = {
         "clip_grad" : np.random.uniform(1.0, 5.0),
         "dropout" : np.random.uniform(0.0, 0.5),
@@ -166,7 +221,7 @@ def hparam_sample(lr_bounds = [1.5, 10**-3]):
     return assignments
 
 #orders them in increasing order of lr
-def get_k_sorted_hparams(k,lr_upper_bound=1.5, lr_lower_bound=10**-3):
+def get_k_sorted_hparams(k,lr_upper_bound=1.5, lr_lower_bound=10**-4):
     all_assignments = []
     
     for i in range(k):
@@ -182,7 +237,7 @@ def train_m_then_n_models(m,n,counter, total_evals,start_time,**kwargs):
     for i in range(m):
         cur_assignments = all_assignments[i]
         args = ExperimentParams(**kwargs, **cur_assignments)
-        cur_valid_err, cur_test_err = train_classifier.main(args)
+        cur_valid_err = train_classifier.main(args)
         if cur_valid_err < best_valid_err:
             best_assignment = cur_assignments
             best_valid_err = cur_valid_err
@@ -192,7 +247,7 @@ def train_m_then_n_models(m,n,counter, total_evals,start_time,**kwargs):
 
     for i in range(n):
         args = ExperimentParams(filename_suffix="_{}".format(i),**kwargs,**best_assignment)
-        cur_valid_err, cur_test_err = train_classifier.main(args)
+        cur_valid_err = train_classifier.main(args)
         counter[0] = counter[0] + 1
         print("trained {} out of {} hyperparameter assignments, so far {} seconds".format(
             counter[0],total_evals, round(time.time()-start_time, 3)))
