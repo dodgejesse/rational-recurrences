@@ -440,9 +440,6 @@ def main_test(args):
     model.load_state_dict(state_dict)
 
     if args.gpu:
-        model.to_cuda(model)
-
-    if args.gpu:
         model.cuda()
 
 
