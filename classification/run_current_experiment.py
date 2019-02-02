@@ -15,6 +15,7 @@ def main():
         loaded_embedding = preload_embed()
     else:
         loaded_data = preload_data()
+        
     
     start_time = time.time()
     counter = [0]
@@ -26,12 +27,13 @@ def main():
         m = 20
         n = 5
         total_evals = (m + n) * len(patterns)
+
         for pattern in patterns:
             train_m_then_n_models(m,n,counter, total_evals, start_time,
                                   pattern = pattern, d_out = "24", depth = 1,
                                   filename_prefix="all_cs_and_equal_rho/hparam_opt/",
                                   dataset = "bert/sst/", use_rho = False, seed=None,
-                                  bert_embed = True, batch_size = 3, max_epoch=2,loaded_data = loaded_data)
+                                  bert_embed = True, batch_size = 32,loaded_data = loaded_data)
         
         
 
@@ -221,7 +223,7 @@ def hparam_sample(lr_bounds):
     return assignments
 
 #orders them in increasing order of lr
-def get_k_sorted_hparams(k,lr_upper_bound=1.5, lr_lower_bound=10**-4):
+def get_k_sorted_hparams(k,lr_upper_bound=1.5, lr_lower_bound=5*10**-5):
     all_assignments = []
     
     for i in range(k):
