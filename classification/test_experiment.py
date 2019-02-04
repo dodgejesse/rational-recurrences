@@ -15,7 +15,8 @@ def main(argv):
                                 dataset = argv.dataset, use_rho = False,
                                 depth = argv.depth, gpu=argv.gpu,
                                 batch_size=argv.batch_size, use_last_cs=argv.use_last_cs,
-                                base_data_dir = argv.base_dir, input_model=argv.input_model)
+                                base_data_dir = argv.base_dir, input_model=argv.input_model,
+                                weight_norm = argv.weight_norm)
 
     if argv.visualize > 0:
         train_classifier.main_visualize(args, os.path.join(argv.base_dir,argv.dataset), argv.visualize)

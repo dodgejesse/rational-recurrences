@@ -73,7 +73,8 @@ class Model(nn.Module):
                 use_rho=args.use_rho,
                 rho_sum_to_one=args.rho_sum_to_one,
                 use_last_cs=args.use_last_cs,
-                use_epsilon_steps=args.use_epsilon_steps
+                use_epsilon_steps=args.use_epsilon_steps,
+                weight_norm=args.weight_norm
             )
             d_out = args.d_out
         else:
@@ -479,6 +480,7 @@ def main_visualize(args, dataset_file, top_k):
                 patt_traces = same_length_traces[j]
 
                 local_scores = all_scores[i][j][:, k]
+
                 local_traces = patt_traces[:, k, :]
 
                 # Sorting scores, traces and documents by the score.
