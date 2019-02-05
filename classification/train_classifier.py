@@ -18,7 +18,7 @@ import classification.modules as modules
 from semiring import *
 import rrnn
 
-
+import save_learned_structure
 
 SOS, EOS = "<s>", "</s>"
 class Model(nn.Module):
@@ -678,6 +678,8 @@ def main(args):
 
         if unchanged == 0 and args.output_dir is not None:
             of = os.path.join(args.output_dir, "best_model.pth")
+            if False:
+                save_learned_structure.to_file(model, of, args)
             print("Writing model to", of)
             torch.save(model.state_dict(), of)
 
