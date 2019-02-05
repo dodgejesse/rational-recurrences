@@ -63,7 +63,8 @@ class ExperimentParams:
                  output_dir=None,
                  input_model=None,
                  bert_embed=False,
-                 loaded_data=None
+                 loaded_data=None,
+                 weight_norm=False
     ):
         self.path = path 
         self.embedding = embedding
@@ -114,6 +115,7 @@ class ExperimentParams:
         self.input_model = input_model
         self.bert_embed = bert_embed
         self.loaded_data = loaded_data
+        self.weight_norm = weight_norm
         
         self.current_experiment()
 
