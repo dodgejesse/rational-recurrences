@@ -684,7 +684,8 @@ class RRNNCell(nn.Module):
                 cs_final = [last_c1]
 
             else:
-                assert False, "custom cuda kernel only implemented for 1,2,3,4-gram models"                
+                assert False, "custom cuda kernel only implemented for 1,2,3,4-gram models"
+            traces = None
         else:
             RRNN_Compute = RRNN_Ngram_Compute_CPU(n_out, self.ngram, self.semiring, self.bidirectional)
 
