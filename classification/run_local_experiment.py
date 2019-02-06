@@ -32,7 +32,8 @@ def main(argv):
                                 max_epoch = argv.max_epoch, patience = argv.patience,
                                 batch_size = argv.batch_size, use_last_cs=argv.use_last_cs,
                                 lr = argv.lr, weight_decay = argv.weight_decay, depth = argv.depth, logging_dir = argv.logging_dir,
-                                base_data_dir = argv.base_dir, output_dir = argv.model_save_dir)
+                                base_data_dir = argv.base_dir, output_dir = argv.model_save_dir,
+                                reg_strength = argv.reg_strength, sparsity_type = argv.sparsity_type)
         cur_valid_err = train_classifier.main(args)
 
     # finding the largest learning rate that doesn't diverge, for evaluating the claims in this paper:
@@ -221,6 +222,9 @@ def training_arg_parser():
     p.add_argument("--logging_dir", help="Logging directory", type=str)
     p.add_argument("--max_epoch", help="Number of iterations", type=int, default=500)
     p.add_argument("--patience", help="Patience parameter (for early stopping)", type=int, default=30)
+    p.add_argument("--sparsity_type", help="Type of sparsity (wfsa, edges, states, rho_entropy or none)",
+                   type=str, default="none")
+    p.add_argument("--reg_strength", help="Regularization strength", type=float, default=0.0)
     # p.add_argument("-r", "--scheduler", help="Use reduce learning rate on plateau schedule", action='store_true')
     # p.add_argument("--debug", help="Debug", type=int, default=0)
     return p
