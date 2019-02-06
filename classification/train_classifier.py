@@ -162,6 +162,12 @@ def get_states_weights(model, args):
 
     states = torch.cat((reshaped_weights[...,0:int(num_edges_in_wfsa/2)],
                         reshaped_weights[...,int(num_edges_in_wfsa/2):num_edges_in_wfsa]),0)
+
+    # to stack the bias terms on as well
+    bias = model.encoder.rnn_lst[0].cells[0].bias.view(num_edges_in_wfsa, len(model.encoder.rnn_lst), num_wfsas)
+    bias = bias[int(bias.shape[0]/2):bias.shape[0],...].transpose(0,2).transpose(0,1)
+    states = torch.cat((states, bias), 0)
+    
     return states
 
 # this computes the group lasso penalty term
