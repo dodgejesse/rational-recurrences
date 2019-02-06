@@ -679,9 +679,10 @@ def main(args):
         if unchanged == 0 and args.output_dir is not None:
             of = os.path.join(args.output_dir, "best_model.pth")
             if False:
-                save_learned_structure.to_file(model, of, args)
-            print("Writing model to", of)
-            torch.save(model.state_dict(), of)
+                save_learned_structure.to_file(model, of, args, train_x)
+            else:
+                print("Writing model to", of)
+                torch.save(model.state_dict(), of)
 
         # if writer is not None:
         #     for name, param in model.named_parameters():

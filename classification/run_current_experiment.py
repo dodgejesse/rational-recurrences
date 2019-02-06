@@ -8,10 +8,10 @@ import regularization_search_experiments
 def main():
 
     
-    exp_num = -2
+    exp_num = -1
 
 
-    if exp_num >= 0:
+    if exp_num != -2:
         loaded_embedding = preload_embed()
     else:
         loaded_data = preload_data()
@@ -37,17 +37,17 @@ def main():
         
         
 
-    # this never got better than about 45% accuracy, might need hparam tuning
     if exp_num == -1:
-        loaded_data = preload_data()
-        args = ExperimentParams(pattern = "1-gram,2-gram,3-gram,4-gram", d_out = "0,4,0,2",
-                                learned_structure = "l1-states-learned", reg_goal_params = 20,
+
+        # adam_layers=1_lr=2.407E-02_dout=24_drout=0.1809_rnndout=0.1537_embdout=0.3141_wdecay=3.64E-07_clip=2.82_pattern=4-gram_sparsity=states_regstr=3.125E-04_goalparams=20_
+        
+        args = ExperimentParams(pattern = "4-gram", d_out = "24", reg_goal_params = 20,
                                 filename_prefix="all_cs_and_equal_rho/saving_model_for_interpretability/",
-                                seed = None, loaded_embedding = None,
-                                dataset = "bert/sst/", use_rho = False,
-                                clip_grad = 1.09, dropout = 0.1943, rnn_dropout = 0.0805, embed_dropout = 0.3489,
-                                lr = 2.553E-02, weight_decay = 1.64E-06, depth = 1, bert_embed = True, batch_size=5,
-                                loaded_data = loaded_data)
+                                seed = 314159, loaded_embedding = loaded_embedding,
+                                dataset = "amazon_categories/original_mix/", use_rho = False,
+                                clip_grad = 2.82, dropout = 0.1809, rnn_dropout = 0.1537, embed_dropout = 0.3141,
+                                lr = 2.407E-02, weight_decay = 3.64E-07, depth = 1, output_dir = "/home/jessedd/projects/rational-recurrences/classification/logging/amazon_categories/original_mix/all_cs_and_equal_rho/saving_model_for_interpretability",
+                                reg_strength = 3.125E-04, sparsity_type = "states")
         cur_valid_err = train_classifier.main(args)
 
     
@@ -193,7 +193,7 @@ def main():
 def preload_embed():
     start = time.time()
     import dataloader
-    embs =  dataloader.load_embedding("/home/jessedd/data/amazon/embedding")
+    embs =  dataloader.load_embedding("/home/jessedd/data/amazon_categories/original_mix/embedding_filtered")
     print("took {} seconds".format(time.time()-start))
     print("preloaded embeddings from amazon dataset.")
     print("")
