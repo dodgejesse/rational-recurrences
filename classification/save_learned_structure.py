@@ -6,10 +6,9 @@ import os
 THRESHOLD = 0.1
 ALLWFSA = None
 
-def to_file(model, filepath, args, train_x):
-
+def to_file(model, filepath, args, data_x, data_y):
     new_model, new_d_out = extract_learned_structure(model, args)
-    check_new_model_predicts_same(model, new_model, train_x)
+    check_new_model_predicts_same(model, new_model, data_x, data_y)
 
     reduced_model_path = os.path.join(args.output_dir, "best_model_dout={}.pth".format(new_d_out))
     print("Writing model to", reduced_model_path)
@@ -21,25 +20,73 @@ def to_file(model, filepath, args, train_x):
 
 
 # a method used to make sure the extracted structure behaves similarly to the learned model
-def check_new_model_predicts_same(model, new_model, train_x):
-    cur_x = (train_x[0])
-    model_feat = encoder_fwd(model, cur_x)
-    new_model_feat = encoder_fwd(new_model, cur_x)
-
-    feats = torch.index_select(model_feat, 1, ALLWFSA)
+def check_new_model_predicts_same(model, new_model, data_x, data_y):
     # can manually look at feats vs new_model_feats, should be close (and identical for max-length WFSAs)
+    #if check == "manually check features from wfsa":
+    if True:
+        cur_x = (data_x[0])
+        model_wfsakeep_pred = predict_one_example(model, ALLWFSA, cur_x)
 
-    predict_all_train(model, new_model, train_x)
+        indices_in_new_model = torch.autograd.Variable(torch.arange(ALLWFSA.shape[0]).type(torch.cuda.LongTensor))
+        new_model_pred = predict_one_example(new_model, indices_in_new_model, cur_x)
+        
+        # the features which didn't make it into the smaller model:
+        model_indices_not_in_new = [int(x) for x in torch.arange(24) if not x in ALLWFSA.data]
+        model_indices_not_in_new = torch.autograd.Variable(torch.cuda.LongTensor(model_indices_not_in_new))
+        
+        model_wfsadiscard_pred = predict_one_example(model, model_indices_not_in_new, cur_x, add_bias = False)
+
+
+        # DEBUG stuff here
+        model_feat = encoder_fwd(model, cur_x)
+        model_feat = model.drop(model_feat)
+        selected_feats = torch.index_select(model_feat, 1, ALLWFSA)[0,:]
+
+        new_model_feat = encoder_fwd(new_model, cur_x)
+        new_model_feat = model.drop(new_model_feat)
+        
+        # this shows that the 14th WFSA (seen in ALLWFSA) has the largest gap, of 0.2152, at epoch 37
+        new_model_feat[0,:] - selected_feats
+        
+
+        
+        print(model_wfsakeep_pred, new_model_pred,model_wfsadiscard_pred)
+    if True:
+        predict_all_train(model, new_model, data_x)
+    if True:
+        compare_err(model, new_model, data_x, data_y)
+
+def predict_one_example(model, indices, cur_x, add_bias = True):
+
+    model_feat = encoder_fwd(model, cur_x)
+    model_feat = model.drop(model_feat)
+    selected_feats = torch.index_select(model_feat, 1, indices)[0,:]
+    # to see what the contribution of the existing wfsas is, and what the contribution is of the ones that were removed
+
+    if add_bias:
+        model_b = model.out.bias
+    else:
+        model_b = 0
+    selected_weights = torch.index_select(model.out.weight, 1, indices)
+    #selected_weights = torch.index_select(model_w, 1, indices)
+    return selected_weights.matmul(selected_feats) + model_b
     
+
+        
+def compare_err(model, new_model, data_x, data_y):
+    model_err = round(train_classifier.eval_model(None, model, data_x, data_y), 4)
+    new_model_err = round(train_classifier.eval_model(None, new_model, data_x, data_y), 4)
+    print("difference: {}, model err: {}, extracted structure model err: {}".format(
+        round(new_model_err - model_err, 4), model_err, new_model_err))
     
 # a method used to make sure the extracted structure behaves similarly to the learned model
-def predict_all_train(model, new_model, train_x):
+def predict_all_train(model, new_model, data_x):
     model.eval()
     new_model.eval()
     total_examples = 0
     total_same_pred = 0
-    for i in range(len(train_x)):
-        cur_x = (train_x[i])
+    for i in range(len(data_x)):
+        cur_x = (data_x[i])
         total_same_pred += sum(new_model(cur_x).data.max(1)[1] == model(cur_x).data.max(1)[1])
         total_examples += cur_x[0].shape[0]
     print("total: {}, same pred: {}, frac: {}".format(total_examples, total_same_pred, round(total_same_pred * 1.0 / total_examples, 4)))
@@ -58,11 +105,10 @@ def encoder_fwd(model, cur_x):
     feat = out_fwd[-1,:,0,:]
     return feat
 
+def extract_learned_structure(model, args, epoch = 0):
     
-def extract_learned_structure(model, args):
     states = train_classifier.get_states_weights(model, args)
     num_wfsas = int(args.d_out)
-    
     num_ngrams, num_of_each_ngram = find_num_ngrams(states, num_wfsas)
 
     new_model, new_d_out = create_new_model(num_of_each_ngram, args, model)
@@ -82,7 +128,7 @@ def update_new_model_weights(model, new_model, num_ngrams, args):
     for i in range(int(num_edges_in_wfsa/2)):
         # if there are no ngrams of this length, continue
         if sum(num_ngrams == i) == 0:
-            import pdb; pdb.set_trace()
+            #import pdb; pdb.set_trace()
             continue
         # to get the indices of the wfsas of length i in reshaped_model_weights
         if args.gpu:
@@ -131,6 +177,7 @@ def update_linear_output_layer(model, new_model, num_ngrams, all_wfsa_indices):
 def update_bias_weights(num_edges_in_wfsa, num_wfsas, model, new_model, wfsa_indices, args, i, cur_cell_num):
     # do something with the bias term.
     # it looks like we don't actually use the first half of the first dim of the bias anywhere.
+    # DEBUG fix these magic numbers
     model_bias = model.encoder.rnn_lst[0].cells[0].bias.view(8, 1, 24)
     cur_model_bias = torch.index_select(model_bias, 2, wfsa_indices)
     # to get the parts of the bias that are actually used
@@ -196,17 +243,20 @@ def find_num_ngrams(states, num_wfsas):
     # a list which stores the n-gram of each wfsa (e.g. 0,1,2 etc.) 
     num_ngrams = []
     
-    num_states = states.shape[2]    
+    num_states = states.shape[2]
 
     # to find the largest state which is above the threshold
     for i in range(num_wfsas):
         cur_max_state = -1
+        prev_group_norm = -1
         for j in range(num_states):
 
             cur_group = states[:,i,j].data
 
             if cur_group.norm(2) > THRESHOLD and cur_max_state == j - 1:
+                # and prev_group_norm * .1 < cur_group.norm(2)
                 cur_max_state = j
+            prev_group_norm = cur_group.norm(2)
         num_ngrams.append(cur_max_state)
 
     num_ngrams = np.asarray(num_ngrams)
