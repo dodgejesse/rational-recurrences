@@ -2,6 +2,7 @@ import sys
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
+import numpy as np
 
 NEG_INF = -10000000
 
@@ -9,56 +10,56 @@ def RRNN_Ngram_Compute_CPU(d, ngram, semiring, bidirectional=False):
     # Compute traces for n_patterns patterns and n_docs documents
     class TraceElementParallel():
         def __init__(self, f, u, prev_traces, i, t, n_patterns, n_docs):
-            self.u_indices = torch.zeros([n_docs, n_patterns, int(ngram)])
+            self.u_indices = np.zeros((n_docs, n_patterns, ngram), dtype=int)
 
             # Lower triangle in dynamic programming table is impossible (i.e., -inf)
             if t < i:
-                size = (n_docs, n_patterns)
-                self.score = semiring.zero(f.data, *size)
+                self.score = NEG_INF*np.ones((n_docs, n_patterns))
                 return
 
             # Previous trace values
-            u_score = u.data.clone()
-            f_score = f.data.clone()
+            u_score = np.copy(u.data.numpy())
+            f_score = np.copy(f.data.numpy())
 
             # If i > 0, including history in computation of u_score and u_indices
             if i > 0:
                 prev_u_indices = prev_traces[i-1].u_indices
-                u_score = semiring.times(u_score, prev_traces[i-1].score)
+                u_score *= prev_traces[i-1].score
             else:
-                prev_u_indices = torch.zeros([n_docs, n_patterns, int(ngram)])
+                prev_u_indices = np.zeros((n_docs, n_patterns, ngram), dtype=int)
 
             # If t == i, we can't take a forget gate.
             if t == i:
-                prev_f_indices = torch.zeros([n_docs, n_patterns, int(ngram)])
-                size = (n_docs, n_patterns)
-                f_score = semiring.zero(f.data, *size)
-                print(f_score.shape)
+                prev_f_indices = np.zeros((n_docs, n_patterns, ngram), dtype=int)
+                f_score = NEG_INF * np.ones((n_docs, n_patterns))
             # Otherwise, including history of forget gate.
             else:
                 prev_f_indices = prev_traces[i].u_indices
-                f_score = semiring.times(f_score, prev_traces[i].score)
+                # max-times semirings
+                if semiring.type == 2:
+                    f_score *= prev_traces[i].score
+                # Max plus or log max times
+                else:
+                    f_score += prev_traces[i].score
 
-            # assert((not np.isnan(u_score).any()) and (not np.isnan(f_score).any()))
+            assert((not np.isnan(u_score).any()) and (not np.isnan(f_score).any()))
 
             # Dynamic program selection
             selected = u_score >= f_score
             not_selected = 1 - selected
 
-            # In the cases where u was selected, updating u_indices with current time step.
-            self.u_indices[selected, i] = t
-
-            # Equivalent to np.maximum(u_score, f_score)
+            # Equivalent to np.maximum(u_score, f_score) (or minimum)
             self.score = selected * u_score + not_selected * f_score
 
-            selected.unqueeze_(2)
-            not_selected.unqueeze_(2)
             # A fancy way of selecting the previous indices based on the selection criterion above.
-            prevs = selected * prev_u_indices + not_selected * prev_f_indices
+            prevs = np.expand_dims(selected, 2) * prev_u_indices + \
+                    np.expand_dims(not_selected, 2) * prev_f_indices
 
             # Updating u_indices with history (deep copy!)
-            self.u_indices[:, :, :i+1] = prevs[:, :, :i+1].clone()
+            self.u_indices[:, :, :i+1] = np.copy(prevs[:, :, :i+1])
 
+            # In the cases where u was selected, updating u_indices with current time step.
+            self.u_indices[selected, i] = t
 
 
     def rrnn_compute_cpu(u, cs_init=None, eps=None, keep_trace=False):
