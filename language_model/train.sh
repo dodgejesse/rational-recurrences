@@ -46,8 +46,13 @@ weight_decay=1e-5
 patience=30
 gpu=True
 
+if [ $# -lt 2 ]; then
+	echo "Usage: $0 <data dir> <log dir>"
+	exit -1
+fi
+
 nohup \
-~/bin/python3.6 train_lm.py --train data/train --dev data/dev --test data/test \
+python3.6 train_lm.py --train $1/train --dev $1/dev --test $1/test \
 --hidden_size=$hidden_size \
 --d=$d \
 --lr=$lr \
@@ -69,4 +74,4 @@ nohup \
 --weight_decay=$weight_decay \
 --patience=$patience \
 --gpu=$gpu \
-> log/${pattern}.${hidden_size}.${depth}.${input_dropout}.${output_dropout}.${dropout}.${lr}.${lr_decay}.${lr_decay_epoch} &
+> $2/${pattern}.${hidden_size}.${depth}.${input_dropout}.${output_dropout}.${dropout}.${lr}.${lr_decay}.${lr_decay_epoch} &
