@@ -12,7 +12,7 @@ from cuda.fourgram_rrnn import *
 from cuda.threegram_rrnn import *
 from cuda.twogram_rrnn import *
 from cuda.onegram_rrnn import *
-
+from cuda.onegram_rrnn_semiring import *
 
 class RRNN_Unigram_Compute_GPU(Function):
 
@@ -293,7 +293,6 @@ class RRNN_1gram_Compute_GPU(Function):
         print ("RRNN loaded for gpu {}".format(device))
         mod = function.Module()
         mod.load(bytes(self._RRNN_PTX.encode()))
-
         if self.semiring.type == 0:
             fwd_func = mod.get_function("rrnn_fwd")
             bwd_func = mod.get_function("rrnn_bwd")

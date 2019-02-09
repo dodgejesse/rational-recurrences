@@ -1,7 +1,7 @@
 ONEGRAM_RRNN = """
             
 extern "C" {
-     __global__ void rrnn_fwd(
+     __global__ void rrnn_semiring_fwd(
                 const float * __restrict__ u, 
                 const float * __restrict__ c1_init,
                 const int len, 
@@ -34,7 +34,7 @@ extern "C" {
         }
     }
     
-    __global__ void rrnn_bwd(
+    __global__ void rrnn_semiring_bwd(
                 const float * __restrict__ u, 
                 const float * __restrict__ c1_init,
                 const float * __restrict__ c1,

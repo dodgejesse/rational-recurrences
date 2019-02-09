@@ -47,5 +47,6 @@ semiring="max_plus"
 --max_epoch=$max_epoch \
 --weight_decay=$weight_decay \
 --patience=$patience \
+--semiring=$semiring \
 --gpu=$gpu \
 # > log/${hidden_size}.${depth}.${input_dropout}.${output_dropout}.${dropout}.${lr}.${lr_decay}.${lr_decay_epoch} &
