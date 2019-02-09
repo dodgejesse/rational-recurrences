@@ -715,8 +715,9 @@ class RRNNCell(nn.Module):
                 cs = css[-1]
             else:
                 cs = css[0]
-                for i in range(1, len(css)):
-                    cs = self.semiring.plus(cs, css[i])
+                for c in css[1:]:
+                    cs = self.semiring.plus(cs, c)
+
         if self.use_output_gate:
             # assert False, "THIS HASN'T BEEN IMPLEMENTED YET!"
             gcs = self.calc_activation(output*cs)
