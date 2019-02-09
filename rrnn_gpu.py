@@ -304,7 +304,14 @@ class RRNN_1gram_Compute_GPU(Function):
             )
             return current_stream, fwd_func, bwd_func
         else:
-            assert False, "other semirings are not currently implemented."
+            fwd_func = mod.get_function("rrnn_semiring_fwd")
+            bwd_func = mod.get_function("rrnn_semiring_bwd")
+            Stream = namedtuple("Stream", ["ptr"])
+            current_stream = Stream(ptr=torch.cuda.current_stream().cuda_stream)
+            self._DEVICE2FUNC[device] = (
+                current_stream, fwd_func, bwd_func
+            )
+            return current_stream, fwd_func, bwd_func
 
     def get_functions(self):
         res = self._DEVICE2FUNC.get(torch.cuda.current_device(), None)

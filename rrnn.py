@@ -618,8 +618,7 @@ class RRNNCell(nn.Module):
             size = (batch, n_out * bidir)
             cs_init = []
             for i in range(self.ngram):
-                # @todo: do we really need zero + value here?
-                cs_init.append(Variable(input.data.new(*size).zero_()) + Variable(self.semiring.zero(input.data, *size)))
+                cs_init.append(Variable(self.semiring.zero(input.data, *size)))
         else:
             # assert False, "NOT IMPLEMENTED!"
 
