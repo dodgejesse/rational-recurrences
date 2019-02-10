@@ -115,14 +115,10 @@ extern "C" {
             float forget1 = *(up+3);
             float forget2 = *(up+4);
             float forget3 = *(up+5);
-        
-            const float c1_val = *c1p;
-            const float c2_val = *c2p;
-            const float c3_val = *c3p;
             
-            const float prev_c1_val = (row>0) ? (*(c1p-ncols)) : (*(c1_init+col));
-            const float prev_c2_val = (row>0) ? (*(c2p-ncols)) : (*(c2_init+col));
-            const float prev_c3_val = (row>0) ? (*(c3p-ncols)) : (*(c3_init+col));
+            const float prev_c1 = (row>0) ? (*(c1p-ncols)) : (*(c1_init+col));
+            const float prev_c2 = (row>0) ? (*(c2p-ncols)) : (*(c2_init+col));
+            const float prev_c3 = (row>0) ? (*(c3p-ncols)) : (*(c3_init+col));
             
             const float gc1 = *(gc1p) + cur_c1;
             const float gc2 = *(gc2p) + cur_c2;

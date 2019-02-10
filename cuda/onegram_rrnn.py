@@ -63,8 +63,6 @@ extern "C" {
         for (int row = len-1; row >= 0; --row) {
             float u1 = *(up);
             float forget1 = *(up+1);
-        
-            const float c1_val = *c1p;
             
             const float prev_c1_val = (row>0) ? (*(c1p-ncols)) : (*(c1_init+col));
             
