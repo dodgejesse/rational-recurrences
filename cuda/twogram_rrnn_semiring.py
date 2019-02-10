@@ -91,9 +91,6 @@ extern "C" {
             float forget1 = *(up+2);
             float forget2 = *(up+3);
         
-            const float c1_val = *c1p;
-            const float c2_val = *c2p;
-            
             const float prev_c1 = (row>0) ? (*(c1p-ncols)) : (*(c1_init+col));
             const float prev_c2 = (row>0) ? (*(c2p-ncols)) : (*(c2_init+col));
             
@@ -110,12 +107,11 @@ extern "C" {
             *(gup+2) = gforget1;
             cur_c1 += gprev_c1; 
             
+            // float op2 = times_forward(semiring_type, cur_c2, forget2);
+            // float op3 = times_forward(semiring_type, prev_c1, u2);
+            // cur_c2 = plus_forward(semiring_type, op2, op3);
             
-            //float op2 = times_forward(semiring_type, cur_c2, forget2);
-            //float op3 = times_forward(semiring_type, prev_c1, u2);
-            //cur_c2 = plus_forward(semiring_type, op2, op3);
-            
-            float op2 = times_forward(semiring_type, cur_c2, forget2);
+            float op2 = times_forward(semiring_type, prev_c2, forget2);
             float op3 = times_forward(semiring_type, prev_c1, u2);
             float gop2 = 0.f, gop3 = 0.f;
             plus_backward(semiring_type, op2, op3, gc2, gop2, gop3);
