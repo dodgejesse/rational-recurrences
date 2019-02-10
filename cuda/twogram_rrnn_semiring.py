@@ -120,7 +120,7 @@ extern "C" {
             float gop2 = 0.f, gop3 = 0.f;
             plus_backward(semiring_type, op2, op3, gc2, gop2, gop3);
 
-            float gop3_ = 0.f, gu2 = 0.f, gforget2 = 0.f;
+            float gu2 = 0.f, gforget2 = 0.f;
             times_backward(semiring_type, prev_c2, forget2, gop2, gprev_c2, gforget2);
             times_backward(semiring_type, prev_c1, u2, gop3, gprev_c1, gu2);
             *(gup+1) = gu2;
