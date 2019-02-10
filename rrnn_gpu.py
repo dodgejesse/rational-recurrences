@@ -668,7 +668,7 @@ class RRNN_3gram_Compute_GPU(Function):
 
 class RRNN_4gram_Compute_GPU(Function):
 
-    _RRNN_PROG = Program((UTIL + FOURGRAM_RRNN).encode("utf-8"), "rrnn_prog.cu".encode())
+    _RRNN_PROG = Program((UTIL + FOURGRAM_RRNN + FOURGRAM_RRNN_SEMIRING).encode("utf-8"), "rrnn_prog.cu".encode())
     _RRNN_PTX = _RRNN_PROG.compile()
     _DEVICE2FUNC = {}
 
