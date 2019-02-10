@@ -1,4 +1,4 @@
-ONEGRAM_RRNN = """
+ONEGRAM_RRNN_SEMIRING = """
             
 extern "C" {
      __global__ void rrnn_semiring_fwd(
