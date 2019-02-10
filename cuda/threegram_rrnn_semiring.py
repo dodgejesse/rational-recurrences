@@ -38,7 +38,6 @@ extern "C" {
             
             float prev_c1 = cur_c1;
             float prev_c2 = cur_c2;
-            float prev_c3 = cur_c3;
             
             // cur_c1 = cur_c1 * forget1 + u1;
             float op1 = times_forward(semiring_type, cur_c1, forget1);

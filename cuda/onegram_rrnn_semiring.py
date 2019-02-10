@@ -23,7 +23,6 @@ extern "C" {
             float u1 = *(up);
             float forget1 = *(up+1);
             
-            float prev_c1 = cur_c1;
             float op1 = times_forward(semiring_type, cur_c1, forget1);
             cur_c1 = plus_forward(semiring_type, op1, u1);
             
