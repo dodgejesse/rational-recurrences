@@ -132,7 +132,7 @@ extern "C" {
             float op1 = times_forward(semiring_type, prev_c1, forget1);
             float gop1 = 0.f, gu1 = 0.f;
             plus_backward(semiring_type, op1, u1, gc1, gop1, gu1);
-            float gprev_c1 = 0.f, gprev_c2 = 0.f, gforget1=0.f;
+            float gprev_c1 = 0.f, gprev_c2 = 0.f, gprev_c3 = 0.f, gforget1=0.f;
             times_backward(semiring_type, prev_c1, forget1, gop1, gprev_c1, gforget1);
             *(gup) = gu1;
             *(gup+3) = gforget1;
