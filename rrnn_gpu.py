@@ -11,6 +11,7 @@ from cuda.unigram_rrnn import *
 from cuda.fourgram_rrnn import *
 from cuda.threegram_rrnn import *
 from cuda.twogram_rrnn import *
+from cuda.twogram_rrnn_semiring import *
 from cuda.onegram_rrnn import *
 from cuda.onegram_rrnn_semiring import *
 
