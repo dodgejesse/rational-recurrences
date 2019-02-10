@@ -142,7 +142,7 @@ extern "C" {
             //float op3 = times_forward(semiring_type, prev_c1, u2);
             //cur_c2 = plus_forward(semiring_type, op2, op3);
             
-            float op2 = times_forward(semiring_type, cur_c2, forget2);
+            float op2 = times_forward(semiring_type, prev_c2, forget2);
             float op3 = times_forward(semiring_type, prev_c1, u2);
             float gop2 = 0.f, gop3 = 0.f;
             plus_backward(semiring_type, op2, op3, gc2, gop2, gop3);
@@ -152,13 +152,15 @@ extern "C" {
             times_backward(semiring_type, prev_c1, u2, gop3, gprev_c1, gu2);
             *(gup+1) = gu2;
             *(gup+4) = gforget2;
-            
+			// cur_c1 += gprev_c1;
+			cur_c2 += gprev_c2;           	
+ 
             // cur_c3 = cur_c3 * forget3 + prev_c2 * u3;
             // float op4 = times_forward(semiring_type, cur_c3, forget3);
             // float op5 = times_forward(semiring_type, prev_c2, u3);
             // cur_c3 = plus_forward(semiring_type, op4, op5);
             
-            float op4 = times_forward(semiring_type, cur_c3, forget3);
+            float op4 = times_forward(semiring_type, prev_c3, forget3);
             float op5 = times_forward(semiring_type, prev_c2, u3);
             float gop4 = 0.f, gop5 = 0.f;
             plus_backward(semiring_type, op4, op5, gc3, gop4, gop5);
