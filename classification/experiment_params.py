@@ -151,6 +151,10 @@ class ExperimentParams:
             name += self.filename_suffix
         if not self.gpu:
             name = name + "_cpu"
+        if self.semiring == 'max_plus':
+            name = name + "_mp"
+        elif self.semiring == 'max_times':
+            name = name + "_mt"
 
         return name
 
