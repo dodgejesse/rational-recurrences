@@ -156,7 +156,7 @@ class Model(nn.Module):
 
     def forward(self, x, init):
         emb = self.input_drop(self.embedding_layer(x))
-        output, hidden = self.rnn(emb, init)
+        output, hidden, _ = self.rnn(emb, init)
 
         if self.num_mlp_layer == 2:
             output = self.drop(output)
@@ -178,7 +178,7 @@ class Model(nn.Module):
         elif self.args.model == "rrnn":
             init_input = self.init_input(batch_size)
             emb = self.input_drop(self.embedding_layer(init_input))
-            output, hidden = self.rnn(emb, None)
+            output, hidden, _ = self.rnn(emb, None)
             return hidden
         else:
             assert False
@@ -188,7 +188,7 @@ class Model(nn.Module):
         batch_size = 1
         hidden = self.init_hidden(batch_size)
         hidden = repackage_hidden(self.args, hidden)
-        output, hidden = self.rnn(emb, hidden)
+        output, hidden, _ = self.rnn(emb, hidden)
         output = output.view(-1, output.size(2))
         output = self.output_layer(output)
 

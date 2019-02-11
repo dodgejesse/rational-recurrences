@@ -618,8 +618,7 @@ class RRNNCell(nn.Module):
             size = (batch, n_out * bidir)
             cs_init = []
             for i in range(self.ngram):
-                # @todo: do we really need zero + value here?
-                cs_init.append(Variable(input.data.new(*size).zero_()) + Variable(self.semiring.zero(input.data, *size)))
+                cs_init.append(Variable(self.semiring.zero(input.data, *size)))
         else:
             # assert False, "NOT IMPLEMENTED!"
 
@@ -718,11 +717,6 @@ class RRNNCell(nn.Module):
                 for c in css[1:]:
                     cs = self.semiring.plus(cs, c)
 
-        #print ("%d############" % self.ngram)
-        #print (cs)
-        #print ("##########")
-        #print (css)
-        #print ("##################################################################################################################################")
         if self.use_output_gate:
             # assert False, "THIS HASN'T BEEN IMPLEMENTED YET!"
             gcs = self.calc_activation(output*cs)

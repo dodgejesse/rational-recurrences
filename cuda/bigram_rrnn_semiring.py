@@ -96,9 +96,6 @@ extern "C" {
             float forget1 = *(up+2);
             float forget2 = *(up+3);
 
-            const float c1_val = *c1p;
-            const float c2_val = *c2p;
-
             const float prev_c1 = (row>0) ? (*(c1p-ncols)) : (*(c1_init+col));
             const float prev_c2 = (row>0) ? (*(c2p-ncols)) : (*(c2_init+col));
 

@@ -1,7 +1,7 @@
-FOURGRAM_RRNN = """
+FOURGRAM_RRNN_SEMIRING = """
             
 extern "C" {
-     __global__ void rrnn_fwd(
+     __global__ void rrnn_semiring_fwd(
                 const float * __restrict__ u, 
                 const float * __restrict__ c1_init,
                 const float * __restrict__ c2_init,
@@ -45,10 +45,25 @@ extern "C" {
             float prev_c1 = cur_c1;
             float prev_c2 = cur_c2;
             float prev_c3 = cur_c3;
-            cur_c1 = cur_c1 * forget1 + u1;
-            cur_c2 = cur_c2 * forget2 + (prev_c1) * u2;
-            cur_c3 = cur_c3 * forget3 + (prev_c2) * u3;
-            cur_c4 = cur_c4 * forget4 + (prev_c3) * u4;
+            
+            // cur_c1 = cur_c1 * forget1 + u1;
+            float op1 = times_forward(semiring_type, cur_c1, forget1);
+            cur_c1 = plus_forward(semiring_type, op1, u1);
+            
+            // cur_c2 = cur_c2 * forget2 + prev_c1 * u2;
+            float op2 = times_forward(semiring_type, cur_c2, forget2);
+            float op3 = times_forward(semiring_type, prev_c1, u2);
+            cur_c2 = plus_forward(semiring_type, op2, op3);
+            
+            // cur_c3 = cur_c3 * forget3 + prev_c2 * u3;
+            float op4 = times_forward(semiring_type, cur_c3, forget3);
+            float op5 = times_forward(semiring_type, prev_c2, u3);
+            cur_c3 = plus_forward(semiring_type, op4, op5);
+            
+            // cur_c4 = cur_c4 * forget4 + prev_c3 * u4;            
+            float op6 = times_forward(semiring_type, cur_c4, forget4);
+            float op7 = times_forward(semiring_type, prev_c3, u4);
+            cur_c4 = plus_forward(semiring_type, op6, op7);
             
             *c1p = cur_c1;
             *c2p = cur_c2;
@@ -63,7 +78,7 @@ extern "C" {
         }
     }
     
-    __global__ void rrnn_bwd(
+    __global__ void rrnn_semiring_bwd(
                 const float * __restrict__ u, 
                 const float * __restrict__ c1_init,
                 const float * __restrict__ c2_init,
@@ -124,40 +139,82 @@ extern "C" {
             float forget3 = *(up+6);
             float forget4 = *(up+7);
             
-            const float prev_c1_val = (row>0) ? (*(c1p-ncols)) : (*(c1_init+col));
-            const float prev_c2_val = (row>0) ? (*(c2p-ncols)) : (*(c2_init+col));
-            const float prev_c3_val = (row>0) ? (*(c3p-ncols)) : (*(c3_init+col));
-            const float prev_c4_val = (row>0) ? (*(c4p-ncols)) : (*(c4_init+col));
+            const float prev_c1 = (row>0) ? (*(c1p-ncols)) : (*(c1_init+col));
+            const float prev_c2 = (row>0) ? (*(c2p-ncols)) : (*(c2_init+col));
+            const float prev_c3 = (row>0) ? (*(c3p-ncols)) : (*(c3_init+col));
+            const float prev_c4 = (row>0) ? (*(c4p-ncols)) : (*(c4_init+col));
             
             const float gc1 = *(gc1p) + cur_c1;
             const float gc2 = *(gc2p) + cur_c2;
             const float gc3 = *(gc3p) + cur_c3;
             const float gc4 = *(gc4p) + cur_c4;
             
-            float gu1 = gc1;
+            cur_c1 = cur_c2 = cur_c3 = cur_c4 = 0.f;
+            
+            // cur_c1 = cur_c1 * forget1 + u1;
+            // float op1 = times_forward(semiring_type, cur_c1, forget1);
+            // cur_c1 = plus_forward(semiring_type, op1, u1);
+            float op1 = times_forward(semiring_type, prev_c1, forget1);
+            float gop1 = 0.f, gu1 = 0.f;
+            plus_backward(semiring_type, op1, u1, gc1, gop1, gu1);
+            float gprev_c1 = 0.f, gprev_c2 = 0.f, gprev_c3 = 0.f, gprev_c4 = 0.f, gforget1 = 0.f;
+            times_backward(semiring_type, prev_c1, forget1, gop1, gprev_c1, gforget1);
             *(gup) = gu1;
-            float gforget1 = gc1*prev_c1_val;
             *(gup+4) = gforget1;
+            cur_c1 += gprev_c1; 
             
-            float gu2 = gc2*(prev_c1_val);
+            
+            //float op2 = times_forward(semiring_type, cur_c2, forget2);
+            //float op3 = times_forward(semiring_type, prev_c1, u2);
+            //cur_c2 = plus_forward(semiring_type, op2, op3);
+            
+            float op2 = times_forward(semiring_type, prev_c2, forget2);
+            float op3 = times_forward(semiring_type, prev_c1, u2);
+            float gop2 = 0.f, gop3 = 0.f;
+            plus_backward(semiring_type, op2, op3, gc2, gop2, gop3);
+
+            float gu2 = 0.f, gforget2 = 0.f;
+            times_backward(semiring_type, prev_c2, forget2, gop2, gprev_c2, gforget2);
+            times_backward(semiring_type, prev_c1, u2, gop3, gprev_c1, gu2);
             *(gup+1) = gu2;
-            float gforget2 = gc2*prev_c2_val;
             *(gup+5) = gforget2;
-
-            float gu3 = gc3*(prev_c2_val);
-            *(gup+2) = gu3;
-            float gforget3 = gc3*prev_c3_val;
-            *(gup+6) = gforget3;
+			cur_c2 += gprev_c2; 
             
-            float gu4 = gc4*(prev_c3_val);
-            *(gup+3) = gu4;
-            float gforget4 = gc4*prev_c4_val;
-            *(gup+7) = gforget4;
+			// cur_c3 = cur_c3 * forget3 + prev_c2 * u3;
+            // float op4 = times_forward(semiring_type, cur_c3, forget3);
+            // float op5 = times_forward(semiring_type, prev_c2, u3);
+            // cur_c3 = plus_forward(semiring_type, op4, op5);
+            
+            float op4 = times_forward(semiring_type, prev_c3, forget3);
+            float op5 = times_forward(semiring_type, prev_c2, u3);
+            float gop4 = 0.f, gop5 = 0.f;
+            plus_backward(semiring_type, op4, op5, gc3, gop4, gop5);
 
-            cur_c1 = gc1 * forget1 + gc2 * u2;
-            cur_c2 = gc2 * forget2 + gc3 * u3;
-            cur_c3 = gc3 * forget3 + gc4 * u4;
-            cur_c4 = gc4 * forget4;
+            float gu3 = 0.f, gforget3 = 0.f;
+            times_backward(semiring_type, prev_c3, forget3, gop4, gprev_c3, gforget3);
+            times_backward(semiring_type, prev_c2, u3, gop5, gprev_c2, gu3);
+            *(gup+2) = gu3;
+            *(gup+6) = gforget3;
+			cur_c3 += gprev_c3; 
+            
+            // float op6 = times_forward(semiring_type, cur_c4, forget4);
+            // float op7 = times_forward(semiring_type, prev_c3, u4);
+            // cur_c4 = plus_forward(semiring_type, op6, op7);
+            float op6 = times_forward(semiring_type, prev_c4, forget4);
+            float op7 = times_forward(semiring_type, prev_c3, u4);
+            float gop6 = 0.f, gop7 = 0.f;
+            plus_backward(semiring_type, op6, op7, gc4, gop6, gop7);
+
+            float gu4 = 0.f, gforget4 = 0.f;
+            times_backward(semiring_type, prev_c4, forget4, gop6, gprev_c4, gforget4);
+            times_backward(semiring_type, prev_c3, u4, gop7, gprev_c3, gu4);
+            *(gup+3) = gu4;
+            *(gup+7) = gforget4;
+            
+            cur_c1 += gprev_c1;
+            cur_c2 += gprev_c2;
+            cur_c3 += gprev_c3;
+            cur_c4 += gprev_c4;
 
             up -= ncols_u; 
             c1p -= ncols;
