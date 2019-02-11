@@ -584,6 +584,7 @@ if __name__ == "__main__":
     argparser.add_argument("--gpu", type=str2bool, default=False)
     argparser.add_argument("--eval_ite", type=int, default=100)
     argparser.add_argument("--patience", type=int, default=30)
+    argparser.add_argument("--sparsity_type", type=str, default="none")
 
     args = argparser.parse_args()
     print(args)
