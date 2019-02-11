@@ -21,7 +21,7 @@ export OMP_NUM_THREADS=${num_cpu}
 # input_dropout=0.6
 # output_dropout=0.6
 
-pattern="1-gram"
+pattern="4-gram"
 hidden_size="710"
 d=710
 input_dropout=0.65
@@ -45,14 +45,14 @@ max_epoch=300
 weight_decay=1e-5
 patience=30
 gpu=True
+sparsity_type=states
 
 if [ $# -lt 2 ]; then
 	echo "Usage: $0 <data dir> <log dir>"
 	exit -1
 fi
 
-nohup \
-python3.6 train_lm.py --train $1/train --dev $1/dev --test $1/test \
+com="python3.6 train_lm.py --train $1/train --dev $1/dev --test $1/test \
 --hidden_size=$hidden_size \
 --d=$d \
 --lr=$lr \
@@ -74,4 +74,9 @@ python3.6 train_lm.py --train $1/train --dev $1/dev --test $1/test \
 --weight_decay=$weight_decay \
 --patience=$patience \
 --gpu=$gpu \
+--sparsity_type=$sparsity_type"
+
+echo $com 
+
+nohup $com \
 > $2/${pattern}.${hidden_size}.${depth}.${input_dropout}.${output_dropout}.${dropout}.${lr}.${lr_decay}.${lr_decay_epoch} &
