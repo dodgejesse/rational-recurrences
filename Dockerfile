@@ -25,14 +25,16 @@ RUN apt-get update --fix-missing && apt-get install -y \
     build-essential && \
     rm -rf /var/lib/apt/lists/*
 
+RUN pip install --upgrade pip
+
 RUN pip install --no-cache-dir -q http://download.pytorch.org/whl/cu80/torch-0.4.0-cp36-cp36m-linux_x86_64.whl
 RUN pip install torchvision
 
 COPY requirements.txt requirements.txt
 
-RUN pip install requirements.txt
+RUN pip install -r requirements.txt
 
 
-git clone https://github.com/dodgejesse/rational-recurrences
+RUN git clone https://github.com/dodgejesse/rational-recurrences
 
 CMD ["train.sh", "/input/", "/output"]

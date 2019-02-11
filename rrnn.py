@@ -714,7 +714,10 @@ class RRNNCell(nn.Module):
             if self.use_last_cs:
                 cs = css[-1]
             else:
-                cs = self.semiring.plus(css)
+                cs = css[0]
+                for c in css[1:]:
+                    cs = self.semiring.plus(cs, c)
+
         #print ("%d############" % self.ngram)
         #print (cs)
         #print ("##########")
