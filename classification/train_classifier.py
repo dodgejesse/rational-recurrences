@@ -164,6 +164,7 @@ def get_states_weights(model, args):
                         reshaped_weights[...,int(num_edges_in_wfsa/2):num_edges_in_wfsa]),0)
 
     # to stack the bias terms on as well
+    # DEBUG check that this is also added wherever else we use it.
     bias = model.encoder.rnn_lst[0].cells[0].bias.view(num_edges_in_wfsa, len(model.encoder.rnn_lst), num_wfsas)
     bias = bias[int(bias.shape[0]/2):bias.shape[0],...].transpose(0,2).transpose(0,1)
     states = torch.cat((states, bias), 0)
@@ -368,16 +369,22 @@ def train_model(epoch, model, optimizer,
     log_groups(model, args, logging_file, regularization_groups)
 
     valid_err = eval_model(niter, model, valid_x, valid_y)
+    # DEBUG
+    if True:
+        import save_learned_structure
+        new_model, new_d_out = save_learned_structure.extract_learned_structure(model, args, epoch)
+        new_model_valid_err = eval_model(niter, new_model, valid_x, valid_y)
     scheduler.step(valid_err)
 
     epoch_string = "\n"
     epoch_string += "-" * 110 + "\n"
-    epoch_string += "| Epoch={} | iter={} | lr={:.5f} | reg_strength={} | train_loss={:.6f} | valid_err={:.6f} | regularized_loss={:.6f} |\n".format(
+    epoch_string += "| Epoch={} | iter={} | lr={:.5f} | reg_strength={} | train_loss={:.6f} | valid_err={:.6f} | extracted_structure valid_err={:.6f} | regularized_loss={:.6f} |\n".format(
         epoch, niter,
         optimizer.param_groups[0]["lr"],
         args.reg_strength,
         loss.data[0],
         valid_err,
+        new_model_valid_err,
         reg_loss.data[0]
     )
     epoch_string += "-" * 110 + "\n"
@@ -682,10 +689,13 @@ def main(args):
             unchanged, scheduler, logging_file
         )
 
-        if unchanged == 0 and args.output_dir is not None:
+        debug_epoch = 35
+        if (unchanged == 0 and args.output_dir is not None) or epoch > debug_epoch:
+            if epoch > debug_epoch:
+                import pdb; pdb.set_trace()
             of = os.path.join(args.output_dir, "best_model.pth")
-            if False:
-                save_learned_structure.to_file(model, of, args, train_x)
+            if True:
+                save_learned_structure.to_file(model, of, args, valid_x, valid_y)
             else:
                 print("Writing model to", of)
                 torch.save(model.state_dict(), of)
