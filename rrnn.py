@@ -1,8 +1,8 @@
 import sys
 import torch
 import torch.nn as nn
-import numpy as np
 from torch.autograd import Variable
+import numpy as np
 
 NEG_INF = -10000000
 
@@ -10,7 +10,7 @@ def RRNN_Ngram_Compute_CPU(d, ngram, semiring, bidirectional=False):
     # Compute traces for n_patterns patterns and n_docs documents
     class TraceElementParallel():
         def __init__(self, f, u, prev_traces, i, t, n_patterns, n_docs):
-            self.u_indices = np.zeros((n_docs, n_patterns, int(ngram)), dtype=int)
+            self.u_indices = np.zeros((n_docs, n_patterns, ngram), dtype=int)
 
             # Lower triangle in dynamic programming table is impossible (i.e., -inf)
             if t < i:
@@ -26,16 +26,21 @@ def RRNN_Ngram_Compute_CPU(d, ngram, semiring, bidirectional=False):
                 prev_u_indices = prev_traces[i-1].u_indices
                 u_score *= prev_traces[i-1].score
             else:
-                prev_u_indices = np.zeros((n_docs, n_patterns, int(ngram)), dtype=int)
+                prev_u_indices = np.zeros((n_docs, n_patterns, ngram), dtype=int)
 
             # If t == i, we can't take a forget gate.
             if t == i:
-                prev_f_indices = np.zeros((n_docs, n_patterns, int(ngram)), dtype=int)
+                prev_f_indices = np.zeros((n_docs, n_patterns, ngram), dtype=int)
                 f_score = NEG_INF * np.ones((n_docs, n_patterns))
             # Otherwise, including history of forget gate.
             else:
                 prev_f_indices = prev_traces[i].u_indices
-                f_score *= prev_traces[i].score
+                # max-times semirings
+                if semiring.type == 2:
+                    f_score *= prev_traces[i].score
+                # Max plus or log max times
+                else:
+                    f_score += prev_traces[i].score
 
             assert((not np.isnan(u_score).any()) and (not np.isnan(f_score).any()))
 
@@ -43,7 +48,7 @@ def RRNN_Ngram_Compute_CPU(d, ngram, semiring, bidirectional=False):
             selected = u_score >= f_score
             not_selected = 1 - selected
 
-            # Equivalent to np.maximum(u_score, f_score)
+            # Equivalent to np.maximum(u_score, f_score) (or minimum)
             self.score = selected * u_score + not_selected * f_score
 
             # A fancy way of selecting the previous indices based on the selection criterion above.
@@ -106,17 +111,18 @@ def RRNN_Ngram_Compute_CPU(d, ngram, semiring, bidirectional=False):
                 for i in range(len(cs_init)):
                     if keep_trace:
                         all_traces.append(
-                            TraceElementParallel(forgets[i][t, :, di, :], us[i][t, :, di, :], prev_traces, i, t,
+                            TraceElementParallel(forgets[i][t, :, di, :], us[i][t, :, di, :],
+                                                 prev_traces, i, t,
                                                  us[i].size()[3], u.size()[1])
                         )
                     else:
-                        first_term = cs_prev[i] * forgets[i][t, :, di, :]
+                        first_term = semiring.times(cs_prev[i], forgets[i][t, :, di, :])
                         second_term = us[i][t, :, di, :]
 
                         if i > 0:
-                            second_term = second_term * cs_prev[i-1]
+                            second_term = semiring.times(second_term, cs_prev[i-1])
 
-                        cs_t.append(first_term + second_term)
+                        cs_t.append(semiring.plus(first_term, second_term))
 
 
                 if keep_trace:
@@ -136,11 +142,8 @@ def RRNN_Ngram_Compute_CPU(d, ngram, semiring, bidirectional=False):
                 cs_final[i] = torch.stack(cs_final[i], dim=1).view(batch, -1)
 
         return css, cs_final, all_traces
-    if semiring.type == 0:
-        # plus times
-        return rrnn_compute_cpu
-    else:
-        assert False, "OTHER SEMIRINGS NOT IMPLEMENTED!"
+
+    return rrnn_compute_cpu
 
 def RRNN_Bigram_Compute_CPU(d, k, semiring, bidirectional=False):
     """CPU version of the core RRNN computation.
@@ -268,19 +271,16 @@ def RRNN_Unigram_Compute_CPU(d, k, semiring, bidirectional=False):
 
             c_prev = c_init[:, di, :]
             for t in time_seq:
-                c_t = c_prev * forget[t, :, di, :] + u[t, :, di, :]
+                c_t = semiring.plus(
+                    semiring.times(c_prev, forget[t, :, di, :]),u[t, :, di, :]
+                )
                 c_prev = c_t
                 cs[t, :, di, :] = c_t
             c_final.append(c_t)
 
         return cs, torch.stack(c_final, dim=1).view(batch, -1)
 
-    if semiring.type == 0:
-        # plus times
-        return rrnn_compute_cpu
-    else:
-        assert False
-
+    return rrnn_compute_cpu
 
 class RRNNCell(nn.Module):
     def __init__(self,
@@ -353,6 +353,7 @@ class RRNNCell(nn.Module):
             n_in,
             self.size_per_dir*self.bidir
         ))
+
         self.bias = nn.Parameter(torch.Tensor(
             self.size_per_dir*self.bidir
         ))
@@ -617,8 +618,7 @@ class RRNNCell(nn.Module):
             size = (batch, n_out * bidir)
             cs_init = []
             for i in range(self.ngram):
-                cs_init.append(Variable(input.data.new(*size).zero_()))
-
+                cs_init.append(Variable(self.semiring.zero(input.data, *size)))
         else:
             # assert False, "NOT IMPLEMENTED!"
 
@@ -642,6 +642,7 @@ class RRNNCell(nn.Module):
         u = Variable(u_.data.new(length, batch, bidir, n_out, 2*self.ngram))
 
         for i in range(self.ngram, 2*self.ngram):
+            # @todo: log here? why not log main path weights?
             forget_bias = bias[i, ...]
             u[..., i] = (u_[..., i] + forget_bias).sigmoid()   # forget 
 
@@ -702,21 +703,20 @@ class RRNNCell(nn.Module):
                 rho = sm(self.bias_final.view(bidir, n_out, int(self.k/2)))
             else:
                 rho = self.bias_final.view(bidir, n_out, int(self.k/2)).sigmoid()
-            css_times_rho = []
-            for i in range(len(css)):
-                css_times_rho.append(css[i] * rho[...,i])
 
-            cs = sum(css_times_rho)
+            # @todo: do we need to log rho here?
+
+            cs = self.semiring.times(css[0], rho[...,0])
+            for i in range(1, len(css)):
+                cs = self.semiring.plus(cs, self.semiring.times(css[i], rho[...,i]))
         else:
             if self.use_last_cs:
                 cs = css[-1]
             else:
-                cs = sum(css)
-        #print ("%d############" % self.ngram)
-        #print (cs)
-        #print ("##########")
-        #print (css)
-        #print ("##################################################################################################################################")
+                cs = css[0]
+                for c in css[1:]:
+                    cs = self.semiring.plus(cs, c)
+
         if self.use_output_gate:
             # assert False, "THIS HASN'T BEEN IMPLEMENTED YET!"
             gcs = self.calc_activation(output*cs)
@@ -728,19 +728,14 @@ class RRNNCell(nn.Module):
     
     def forward(self, input, init_hidden=None, keep_trace=False):
 
-        if self.semiring.type == 0:
-            # plus times
-            if self.pattern == "bigram":
-                return self.real_bigram_forward(input=input, init_hidden=init_hidden)
-            elif self.pattern == "unigram":
-                return self.real_unigram_forward(input=input, init_hidden=init_hidden)
-            else:
-                # it should be of the form "4-gram"
-                return self.real_ngram_forward(input=input, init_hidden=init_hidden, keep_trace=keep_trace)
-                
+        # plus times
+        if self.pattern == "bigram":
+            return self.real_bigram_forward(input=input, init_hidden=init_hidden)
+        elif self.pattern == "unigram":
+            return self.real_unigram_forward(input=input, init_hidden=init_hidden)
         else:
-            assert False, "not implemented yet."
-            return self.semiring_forward(input=input, init_hidden=init_hidden)
+            # it should be of the form "4-gram"
+            return self.real_ngram_forward(input=input, init_hidden=init_hidden, keep_trace=keep_trace)
 
     def get_dropout_mask_(self, size, p, rescale=True):
         w = self.weight.data

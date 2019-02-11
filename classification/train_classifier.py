@@ -409,6 +409,7 @@ def train_model(epoch, model, optimizer,
 
 def main_visualize(args, dataset_file, top_k):
     # datasets and labels are 3-size array: 0 - train, 1 - dev, 2 - test
+    args.semiring = 'max_times'
     model, datasets, labels, emb_layer = main_init(args)
 
     model.eval()

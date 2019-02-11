@@ -9,10 +9,13 @@ from cuda.bigram_rrnn import *
 from cuda.bigram_rrnn_semiring import *
 from cuda.unigram_rrnn import *
 from cuda.fourgram_rrnn import *
+from cuda.fourgram_rrnn_semiring import *
 from cuda.threegram_rrnn import *
+from cuda.threegram_rrnn_semiring import *
 from cuda.twogram_rrnn import *
+from cuda.twogram_rrnn_semiring import *
 from cuda.onegram_rrnn import *
-
+from cuda.onegram_rrnn_semiring import *
 
 class RRNN_Unigram_Compute_GPU(Function):
 
@@ -274,7 +277,7 @@ class RRNN_Bigram_Compute_GPU(Function):
 
 class RRNN_1gram_Compute_GPU(Function):
 
-    _RRNN_PROG = Program((UTIL + ONEGRAM_RRNN).encode("utf-8"), "rrnn_prog.cu".encode())
+    _RRNN_PROG = Program((UTIL + ONEGRAM_RRNN + ONEGRAM_RRNN_SEMIRING).encode("utf-8"), "rrnn_prog.cu".encode())
     _RRNN_PTX = _RRNN_PROG.compile()
     _DEVICE2FUNC = {}
 
@@ -293,7 +296,6 @@ class RRNN_1gram_Compute_GPU(Function):
         print ("RRNN loaded for gpu {}".format(device))
         mod = function.Module()
         mod.load(bytes(self._RRNN_PTX.encode()))
-
         if self.semiring.type == 0:
             fwd_func = mod.get_function("rrnn_fwd")
             bwd_func = mod.get_function("rrnn_bwd")
@@ -304,7 +306,14 @@ class RRNN_1gram_Compute_GPU(Function):
             )
             return current_stream, fwd_func, bwd_func
         else:
-            assert False, "other semirings are not currently implemented."
+            fwd_func = mod.get_function("rrnn_semiring_fwd")
+            bwd_func = mod.get_function("rrnn_semiring_bwd")
+            Stream = namedtuple("Stream", ["ptr"])
+            current_stream = Stream(ptr=torch.cuda.current_stream().cuda_stream)
+            self._DEVICE2FUNC[device] = (
+                current_stream, fwd_func, bwd_func
+            )
+            return current_stream, fwd_func, bwd_func
 
     def get_functions(self):
         res = self._DEVICE2FUNC.get(torch.cuda.current_device(), None)
@@ -388,7 +397,7 @@ class RRNN_1gram_Compute_GPU(Function):
     
 class RRNN_2gram_Compute_GPU(Function):
 
-    _RRNN_PROG = Program((UTIL + TWOGRAM_RRNN).encode("utf-8"), "rrnn_prog.cu".encode())
+    _RRNN_PROG = Program((UTIL + TWOGRAM_RRNN + TWOGRAM_RRNN_SEMIRING).encode("utf-8"), "rrnn_prog.cu".encode())
     _RRNN_PTX = _RRNN_PROG.compile()
     _DEVICE2FUNC = {}
 
@@ -418,7 +427,14 @@ class RRNN_2gram_Compute_GPU(Function):
             )
             return current_stream, fwd_func, bwd_func
         else:
-            assert False, "other semirings are not currently implemented."
+            fwd_func = mod.get_function("rrnn_semiring_fwd")
+            bwd_func = mod.get_function("rrnn_semiring_bwd")
+            Stream = namedtuple("Stream", ["ptr"])
+            current_stream = Stream(ptr=torch.cuda.current_stream().cuda_stream)
+            self._DEVICE2FUNC[device] = (
+                current_stream, fwd_func, bwd_func
+            )
+            return current_stream, fwd_func, bwd_func
 
     def get_functions(self):
         res = self._DEVICE2FUNC.get(torch.cuda.current_device(), None)
@@ -511,7 +527,7 @@ class RRNN_2gram_Compute_GPU(Function):
 
 class RRNN_3gram_Compute_GPU(Function):
 
-    _RRNN_PROG = Program((UTIL + THREEGRAM_RRNN).encode("utf-8"), "rrnn_prog.cu".encode())
+    _RRNN_PROG = Program((UTIL + THREEGRAM_RRNN + THREEGRAM_RRNN_SEMIRING).encode("utf-8"), "rrnn_prog.cu".encode())
     _RRNN_PTX = _RRNN_PROG.compile()
     _DEVICE2FUNC = {}
 
@@ -541,7 +557,14 @@ class RRNN_3gram_Compute_GPU(Function):
             )
             return current_stream, fwd_func, bwd_func
         else:
-            assert False, "other semirings are not currently implemented."
+            fwd_func = mod.get_function("rrnn_semiring_fwd")
+            bwd_func = mod.get_function("rrnn_semiring_bwd")
+            Stream = namedtuple("Stream", ["ptr"])
+            current_stream = Stream(ptr=torch.cuda.current_stream().cuda_stream)
+            self._DEVICE2FUNC[device] = (
+                current_stream, fwd_func, bwd_func
+            )
+            return current_stream, fwd_func, bwd_func
 
     def get_functions(self):
         res = self._DEVICE2FUNC.get(torch.cuda.current_device(), None)
@@ -645,7 +668,7 @@ class RRNN_3gram_Compute_GPU(Function):
 
 class RRNN_4gram_Compute_GPU(Function):
 
-    _RRNN_PROG = Program((UTIL + FOURGRAM_RRNN).encode("utf-8"), "rrnn_prog.cu".encode())
+    _RRNN_PROG = Program((UTIL + FOURGRAM_RRNN + FOURGRAM_RRNN_SEMIRING).encode("utf-8"), "rrnn_prog.cu".encode())
     _RRNN_PTX = _RRNN_PROG.compile()
     _DEVICE2FUNC = {}
 
@@ -675,7 +698,14 @@ class RRNN_4gram_Compute_GPU(Function):
             )
             return current_stream, fwd_func, bwd_func
         else:
-            assert False, "other semirings are not currently implemented."
+            fwd_func = mod.get_function("rrnn_semiring_fwd")
+            bwd_func = mod.get_function("rrnn_semiring_bwd")
+            Stream = namedtuple("Stream", ["ptr"])
+            current_stream = Stream(ptr=torch.cuda.current_stream().cuda_stream)
+            self._DEVICE2FUNC[device] = (
+                current_stream, fwd_func, bwd_func
+            )
+            return current_stream, fwd_func, bwd_func
 
     def get_functions(self):
         res = self._DEVICE2FUNC.get(torch.cuda.current_device(), None)
