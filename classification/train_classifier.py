@@ -239,8 +239,12 @@ def log_groups(model, args, logging_file, groups=None):
 
 def init_logging(args):
 
-    dir_path = args.logging_dir + args.dataset + "/"
-    filename = args.filename() + ".txt"
+    if args.language_modeling:
+        dir_path = args.logging_dir
+        filename = args.filename
+    else:
+        dir_path = args.logging_dir + args.dataset + "/"
+        filename = args.filename() + ".txt"
 
     if not os.path.exists(dir_path):
         os.mkdir(dir_path)
@@ -253,16 +257,19 @@ def init_logging(args):
     logging_file = open(dir_path + filename, "w")
 
     # to save args (without the pre-loaded data or embeddings)
-    tmp_embed = args.loaded_embedding
-    tmp_data = args.loaded_data
-    args.loaded_embedding=True
-    args.loaded_data = True
+    if args.loaded_embedding:
+        tmp_embed = args.loaded_embedding
+        args.loaded_embedding=True
+    if args.loaded_data:
+        tmp_data = args.loaded_data
+        args.loaded_data = True
     logging_file.write(str(args))
-    args.loaded_embedding = tmp_embed
-    args.loaded_data = tmp_data
+    if args.loaded_embedding:
+        args.loaded_embedding = tmp_embed
+    if args.loaded_data:
+        args.loaded_data = tmp_data
     
-    #print(args)
-    print("saving in {}".format(args.dataset + args.filename()))
+    print("saving in {}".format(filename))
     return logging_file
 
 
@@ -370,7 +377,7 @@ def train_model(epoch, model, optimizer,
 
     valid_err = eval_model(niter, model, valid_x, valid_y)
     # DEBUG
-    if True:
+    if args.sparsity_type == "states":
         import save_learned_structure
         new_model, new_d_out = save_learned_structure.extract_learned_structure(model, args, epoch)
         new_model_valid_err = eval_model(niter, new_model, valid_x, valid_y)
@@ -378,7 +385,8 @@ def train_model(epoch, model, optimizer,
 
     epoch_string = "\n"
     epoch_string += "-" * 110 + "\n"
-    epoch_string += "| Epoch={} | iter={} | lr={:.5f} | reg_strength={} | train_loss={:.6f} | valid_err={:.6f} | extracted_structure valid_err={:.6f} | regularized_loss={:.6f} |\n".format(
+    if args.sparsity_type == "states":
+        epoch_string += "| Epoch={} | iter={} | lr={:.5f} | reg_strength={} | train_loss={:.6f} | valid_err={:.6f} | extracted_structure valid_err={:.6f} | regularized_loss={:.6f} |\n".format(
         epoch, niter,
         optimizer.param_groups[0]["lr"],
         args.reg_strength,
@@ -386,7 +394,16 @@ def train_model(epoch, model, optimizer,
         valid_err,
         new_model_valid_err,
         reg_loss.data[0]
-    )
+        )
+    else:
+        epoch_string += "| Epoch={} | iter={} | lr={:.5f} | reg_strength={} | train_loss={:.6f} | valid_err={:.6f} | regularized_loss={:.6f} |\n".format(
+        epoch, niter,
+        optimizer.param_groups[0]["lr"],
+        args.reg_strength,
+        loss.data[0],
+        valid_err,
+        reg_loss.data[0]
+        )
     epoch_string += "-" * 110 + "\n"
 
     logging_file.write(epoch_string)
@@ -690,16 +707,22 @@ def main(args):
             unchanged, scheduler, logging_file
         )
 
-        debug_epoch = 35
-        if (unchanged == 0 and args.output_dir is not None) or epoch > debug_epoch:
-            if epoch > debug_epoch:
-                import pdb; pdb.set_trace()
+        # DEBUG
+        #debug_epoch = 35
+        #if (unchanged == 0 and args.output_dir is not None) or epoch > debug_epoch:
+        #    if epoch > debug_epoch:
+        #        import pdb; pdb.set_trace()
+        #    of = os.path.join(args.output_dir, "best_model.pth")
+        #    if True:
+        #        save_learned_structure.to_file(model, of, args, valid_x, valid_y)
+        #    else:
+        #        print("Writing model to", of)
+        #        torch.save(model.state_dict(), of)
+
+        if unchanged == 0 and args.output_dir is not None:
             of = os.path.join(args.output_dir, "best_model.pth")
-            if True:
-                save_learned_structure.to_file(model, of, args, valid_x, valid_y)
-            else:
-                print("Writing model to", of)
-                torch.save(model.state_dict(), of)
+            print("Writing model to", of)
+            torch.save(model.state_dict(), of)
 
         # if writer is not None:
         #     for name, param in model.named_parameters():

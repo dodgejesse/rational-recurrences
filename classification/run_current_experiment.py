@@ -8,7 +8,7 @@ import regularization_search_experiments
 def main():
 
     
-    exp_num = -1
+    exp_num = 6
 
 
     if exp_num != -2:
@@ -104,7 +104,9 @@ def main():
         for category in categories:
             for reg_goal_params in reg_goal_params_list:
                 best, reg_search_counters = regularization_search_experiments.train_k_then_l_models(
-                    k,l, counter, total_evals, start_time, reg_goal_params = reg_goal_params,
+                    k,l, counter, total_evals, start_time,
+                    logging_dir = "/home/jessedd/projects/rational-recurrences/classification/logging/",
+                    reg_goal_params = reg_goal_params,
                     pattern = "4-gram", d_out = d_out, sparsity_type = "states",
                     use_rho = False,
                     filename_prefix="all_cs_and_equal_rho/hparam_opt/structure_search/add_reg_term_to_loss/",

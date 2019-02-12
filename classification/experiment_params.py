@@ -8,7 +8,8 @@ def get_categories():
     #return ["dvd/","original_mix/"]
     #return ["kitchen_&_housewares/", "books/"]
     #return ["kitchen_&_housewares/"]
-    return ["books/"]
+    return ["original_mix/"]
+
 
         
 
@@ -116,6 +117,7 @@ class ExperimentParams:
         self.bert_embed = bert_embed
         self.loaded_data = loaded_data
         self.weight_norm = weight_norm
+        self.language_modeling = False
         
         self.current_experiment()
 

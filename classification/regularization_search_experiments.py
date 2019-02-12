@@ -73,7 +73,7 @@ def search_reg_str_l1(cur_assignments, kwargs):
     while not found_good_reg_str:
         counter += 1
         args = ExperimentParams(**kwargs, **cur_assignments)
-        cur_valid_err, cur_test_err = train_classifier.main(args)
+        cur_valid_err = train_classifier.main(args)
         learned_d_out, num_params = load_learned_structure.l1_group_norms(args=args, prox=kwargs["prox_step"])
         
         if num_params < kwargs["reg_goal_params"] - distance_from_target:
@@ -106,13 +106,13 @@ def search_reg_str_l1(cur_assignments, kwargs):
             found_good_reg_str = True
     return counter, "okay_lr", cur_valid_err, learned_d_out
 
-def train_k_then_l_models(k,l,counter,total_evals,start_time,**kwargs):
+def train_k_then_l_models(k,l,counter,total_evals,start_time, logging_dir, **kwargs):
     assert "reg_strength" in kwargs
     if "prox_step" not in kwargs:
         kwargs["prox_step"] = False
     elif kwargs["prox_step"]:
         assert False, "It's too unstable. books/all_cs_and_equal_rho/hparam_opt/structure_search/proximal_gradient too big then too small"
-    file_base = "/home/jessedd/projects/rational-recurrences/classification/logging/" + kwargs["dataset"]    
+    file_base = logging_dir + kwargs["dataset"]    
     best = {
         "assignment" : None,
         "valid_err" : 1,
@@ -123,7 +123,7 @@ def train_k_then_l_models(k,l,counter,total_evals,start_time,**kwargs):
 
     reg_search_counters = []
     lr_lower_bound = 7*10**-3
-    lr_upper_bound = 1.5
+    lr_upper_bound = .5
     all_assignments = get_k_sorted_hparams(k, lr_lower_bound, lr_upper_bound)
     for i in range(len(all_assignments)):
         
@@ -158,7 +158,7 @@ def train_k_then_l_models(k,l,counter,total_evals,start_time,**kwargs):
                 
         if kwargs["sparsity_type"] == "rho_entropy":
             args = ExperimentParams(**kwargs, **cur_assignments)
-            cur_valid_err, cur_test_err = train_classifier.main(args)
+            cur_valid_err = train_classifier.main(args)
         
             learned_pattern, learned_d_out, frac_under_pointnine = load_learned_structure.l1_group_norms(
                 file_base + args.filename() + ".txt", .9)
@@ -179,7 +179,7 @@ def train_k_then_l_models(k,l,counter,total_evals,start_time,**kwargs):
     kwargs["reg_strength"] = best["reg_strength"]
     for i in range(l):
         args = ExperimentParams(filename_suffix="_{}".format(i),**kwargs, **best["assignment"])
-        cur_valid_err, cur_test_err = train_classifier.main(args)
+        cur_valid_err = train_classifier.main(args)
         counter[0] = counter[0] + 1
         
     
