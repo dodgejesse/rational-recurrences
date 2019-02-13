@@ -112,6 +112,8 @@ def train_k_then_l_models(k,l,counter,total_evals,start_time, logging_dir, **kwa
         kwargs["prox_step"] = False
     elif kwargs["prox_step"]:
         assert False, "It's too unstable. books/all_cs_and_equal_rho/hparam_opt/structure_search/proximal_gradient too big then too small"
+    kwargs["logging_dir"] = logging_dir
+
     file_base = logging_dir + kwargs["dataset"]    
     best = {
         "assignment" : None,
