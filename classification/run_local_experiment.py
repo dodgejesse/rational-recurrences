@@ -2,55 +2,44 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 import sys
 import os
-from experiment_params import ExperimentParams, get_categories
+from experiment_params import ExperimentParams
 import train_classifier
 import numpy as np
-import time
-import regularization_search_experiments
 import experiment_tools
 
 
 def main(argv):
     loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_dir,argv.dataset))
     
-    exp_num = 0
+    if argv.random_selection:
+        hyper_parameters_assignments = hparam_sample()
+    else:
+        hyper_parameters_assignments = {
+            "clip_grad": argv.clip,
+            "dropout": argv.dropout,
+            "rnn_dropout": argv.rnn_dropout,
+            "embed_dropout": argv.embed_dropout,
+            "lr": argv.lr, "weight_decay": argv.weight_decay,
+            "depth": argv.depth
+        }
 
-    start_time = time.time()
-    counter = [0]
-    categories = get_categories()
-    
-    
-    # a basic experiment
-    if exp_num == 0:
-        if argv.random_selection:
-            hyper_parameters_assignments = hparam_sample()
-        else:
-            hyper_parameters_assignments = {
-                "clip_grad": argv.clip,
-                "dropout": argv.dropout,
-                "rnn_dropout": argv.rnn_dropout,
-                "embed_dropout": argv.embed_dropout,
-                "lr": argv.lr, "weight_decay": argv.weight_decay,
-                "depth": argv.depth
-            }
+    kwargs = {"pattern": argv.pattern, "d_out": argv.d_out,
+                            "learned_structure": argv.learned_structure,
+                            "reg_goal_params": argv.reg_goal_params,
+                            "filename_prefix": argv.filename_prefix,
+                            "seed": argv.seed, "loaded_embedding": loaded_embedding,
+                            "dataset": argv.dataset, "use_rho": False,
+                            "gpu": argv.gpu,
+                            "max_epoch": argv.max_epoch, "patience": argv.patience,
+                            "batch_size": argv.batch_size, "use_last_cs": argv.use_last_cs,
+                            "logging_dir": argv.logging_dir,
+                            "base_data_dir": argv.base_dir, "output_dir": argv.model_save_dir,
+                            "reg_strength": argv.reg_strength, "sparsity_type": argv.sparsity_type,
+                            "semiring": argv.semiring}
 
-        kwargs = {"pattern": argv.pattern, "d_out": argv.d_out,
-                                "learned_structure": argv.learned_structure,
-                                "reg_goal_params": argv.reg_goal_params,
-                                "filename_prefix": argv.filename_prefix,
-                                "seed": argv.seed, "loaded_embedding": loaded_embedding,
-                                "dataset": argv.dataset, "use_rho": False,
-                                "gpu": argv.gpu,
-                                "max_epoch": argv.max_epoch, "patience": argv.patience,
-                                "batch_size": argv.batch_size, "use_last_cs": argv.use_last_cs,
-                                "logging_dir": argv.logging_dir,
-                                "base_data_dir": argv.base_dir, "output_dir": argv.model_save_dir,
-                                "reg_strength": argv.reg_strength, "sparsity_type": argv.sparsity_type,
-                                "semiring": argv.semiring}
+    args = ExperimentParams(**kwargs, **hyper_parameters_assignments)
 
-        args = ExperimentParams(**kwargs, **hyper_parameters_assignments)
-
-        cur_valid_err = train_classifier.main(args)
+    _ = train_classifier.main(args)
 
 
 
@@ -82,7 +71,7 @@ def training_arg_parser():
     p.add_argument("--clip", help="Gradient clipping", type=float, default=1.09)
     p.add_argument('-w', "--weight_decay", help="Weight decay", type=float, default=1.64E-06)
     p.add_argument("-m", "--model_save_dir", help="where to save the trained model", type=str)
-    p.add_argument("--logging_dir", help="Logging directory", type=str)
+    p.add_argument("--logging_dir", help="Logging directory", type=str, required=True)
     p.add_argument("--max_epoch", help="Number of iterations", type=int, default=500)
     p.add_argument("--patience", help="Patience parameter (for early stopping)", type=int, default=30)
     p.add_argument("--sparsity_type", help="Type of sparsity (wfsa, edges, states, rho_entropy or none)",
