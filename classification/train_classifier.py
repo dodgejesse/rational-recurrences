@@ -380,7 +380,11 @@ def train_model(epoch, model, optimizer,
     if args.sparsity_type == "states":
         import save_learned_structure
         new_model, new_d_out = save_learned_structure.extract_learned_structure(model, args, epoch)
-        new_model_valid_err = eval_model(niter, new_model, valid_x, valid_y)
+        if new_model is not None:
+            new_model_valid_err = eval_model(niter, new_model, valid_x, valid_y)
+        else:
+            new_model_valid_err = 0.0
+
     scheduler.step(valid_err)
 
     epoch_string = "\n"

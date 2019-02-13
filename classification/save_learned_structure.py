@@ -110,6 +110,9 @@ def extract_learned_structure(model, args, epoch = 0):
     states = train_classifier.get_states_weights(model, args)
     num_wfsas = int(args.d_out)
     num_ngrams, num_of_each_ngram = find_num_ngrams(states, num_wfsas)
+   
+    if max(num_ngrams) == -1:
+        return None, 0
 
     new_model, new_d_out = create_new_model(num_of_each_ngram, args, model)
 
@@ -222,6 +225,7 @@ def create_new_model(num_of_each_ngram, args, model):
     for i in range(len(num_of_each_ngram)):
         new_d_out += "{},".format(num_of_each_ngram[i])
     new_d_out = new_d_out[:-1]
+
     new_pattern = "1-gram,2-gram,3-gram,4-gram"
 
     # setting the new d_out and pattern in args
