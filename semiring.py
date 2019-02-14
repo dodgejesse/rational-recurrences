@@ -20,7 +20,8 @@ class Semiring:
                  plus,
                  times,
                  from_float,
-                 to_float):
+                 to_float,
+                 activation):
         self.type = type
         self.zero = zero
         self.one = one
@@ -28,6 +29,7 @@ class Semiring:
         self.times = times
         self.from_float = from_float
         self.to_float = to_float
+        self.activation = activation
 
 
 # element-wise plus, times
@@ -38,6 +40,7 @@ PlusTimesSemiring = \
         one,
         torch.add,
         torch.mul,
+        identity,
         identity,
         identity
     )
@@ -51,7 +54,8 @@ MaxPlusSemiring = \
         torch.max,
         torch.add,
         identity,
-        identity
+        identity,
+        torch.sigmoid
     )
 
 # element-wise max, times. in log-space
@@ -63,7 +67,8 @@ MaxTimesSemiring = \
         torch.max,
         torch.mul,
         identity,
-        identity
+        identity,
+        torch.sigmoid
     )
 
 def LogSum(x, y):

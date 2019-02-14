@@ -647,7 +647,7 @@ class RRNNCell(nn.Module):
             u[..., i] = (u_[..., i] + forget_bias).sigmoid()   # forget 
 
         for i in range(0, self.ngram):
-            u[..., i] = u_[..., i] * (1. - u[..., i + self.ngram])  # input
+            u[..., i] = self.semiring.activation(u_[..., i]) * (1. - u[..., i + self.ngram])  # input
 
         if self.use_output_gate:
             output_bias = bias[-1, ...]
