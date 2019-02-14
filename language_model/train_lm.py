@@ -7,9 +7,16 @@ import torch.nn as nn
 from torch.optim import SGD
 from torch.autograd import Variable
 
-sys.path.append("..")
+if ".." not in sys.path:
+    sys.path.append("..")
 import rrnn
 from semiring import *
+
+if "../classification/" not in sys.path:
+    sys.path.append("../classification/")
+import train_classifier
+
+
 SOS, EOS = "<s>", "</s>"
 
 
@@ -40,7 +47,7 @@ def create_batches(data_text, map_to_ids, batch_size, cuda=False):
 
 
 class EmbeddingLayer(nn.Module):
-    def __init__(self, n_d, words, sos=SOS, fix_emb=False):
+    def __init__(self, input_size, words, sos=SOS, fix_emb=False):
         super(EmbeddingLayer, self).__init__()
         word2id, id2word = {}, {}
         if sos not in word2id:
@@ -51,8 +58,8 @@ class EmbeddingLayer(nn.Module):
                 word2id[w] = len(word2id)
                 id2word[word2id[w]] =w
         self.word2id, self.id2word = word2id, id2word
-        self.n_V, self.n_d = len(word2id), n_d
-        self.embedding = nn.Embedding(self.n_V, n_d)
+        self.n_V, self.input_size = len(word2id), input_size
+        self.embedding = nn.Embedding(self.n_V, input_size)
         self.sosid = word2id[sos]
 
     def forward(self, x):
@@ -71,13 +78,13 @@ class Model(nn.Module):
         super(Model, self).__init__()
         self.args = args
 
-        self.n_d = args.d
+        self.input_size = args.input_size
         self.depth = args.depth
         self.drop = nn.Dropout(args.dropout)
         self.input_drop = nn.Dropout(args.input_dropout)
         self.output_drop = nn.Dropout(args.output_dropout)
-        self.embedding_layer = EmbeddingLayer(self.n_d, words)
-        self.n_V = self.embedding_layer.n_V
+        self.emb_layer = EmbeddingLayer(self.input_size, words)
+        self.n_V = self.emb_layer.n_V
         self.num_mlp_layer = args.num_mlp_layer
 
         use_tanh, use_relu, use_selu = 0, 0, 0
@@ -91,8 +98,8 @@ class Model(nn.Module):
             assert args.activation == "none"
 
         if args.model == "lstm":
-            self.rnn=nn.LSTM(
-                self.n_d, self.n_d,
+            self.encoder=nn.LSTM(
+                self.input_size, self.input_size,
                 self.depth,
                 dropout = args.rnn_dropout
             )
@@ -103,10 +110,10 @@ class Model(nn.Module):
                 self.semiring = MaxPlusSemiring
             else:
                 assert False, "Semiring should either be plus_times or max_plus, not {}".format(args.semiring)
-            self.rnn = rrnn.RRNN(
+            self.encoder = rrnn.RRNN(
                 self.semiring,
-                self.n_d,
-                args.hidden_size,
+                self.input_size,
+                args.d_out,
                 self.depth,
                 pattern=args.pattern,
                 dropout=args.dropout,
@@ -125,18 +132,22 @@ class Model(nn.Module):
             pass
         else:
             assert False
-        self.output_layer = nn.Linear(self.n_d, self.n_V)
+        final_layer_d_out = args.d_out.split(";")[-1]
+        num_wfsa_output =  sum([int(one_size) for one_size in final_layer_d_out.split(",")])
+        self.output_layer = nn.Linear(num_wfsa_output, self.n_V)
+
+        assert self.output_layer.weight.shape == self.emb_layer.embedding.weight.shape, "suspected this would be a problem."
         # tie weights
-        self.output_layer.weight = self.embedding_layer.embedding.weight
+        self.output_layer.weight = self.emb_layer.embedding.weight
 
         self.init_weights()
         if args.model != "lstm":
-           self.rnn.init_weights()
+           self.encoder.init_weights()
 
 
     def init_input(self, batch_size):
         args = self.args
-        sosid = self.embedding_layer.sosid
+        sosid = self.emb_layer.sosid
         init_input = torch.from_numpy(np.array(
             [sosid, sosid, sosid, sosid] * batch_size, dtype=np.int64).reshape(4, batch_size))
 
@@ -146,7 +157,7 @@ class Model(nn.Module):
 
 
     def init_weights(self):
-        val_range = (3.0/self.n_d)**0.5
+        val_range = (3.0/self.input_size)**0.5
         for p in self.parameters():
             if p.dim() > 1:  # matrix
                 p.data.uniform_(-val_range, val_range)
@@ -155,8 +166,8 @@ class Model(nn.Module):
 
 
     def forward(self, x, init):
-        emb = self.input_drop(self.embedding_layer(x))
-        output, hidden, _ = self.rnn(emb, init)
+        emb = self.input_drop(self.emb_layer(x))
+        output, hidden, _ = self.encoder(emb, init)
 
         if self.num_mlp_layer == 2:
             output = self.drop(output)
@@ -173,12 +184,12 @@ class Model(nn.Module):
     def init_hidden(self, batch_size):
         weight = next(self.parameters()).data
         if self.args.model == "lstm":
-            return (Variable(weight.new(self.depth, batch_size, self.n_d).zero_()),
-                    Variable(weight.new(self.depth, batch_size, self.n_d).zero_()))
+            return (Variable(weight.new(self.depth, batch_size, self.input_size).zero_()),
+                    Variable(weight.new(self.depth, batch_size, self.input_size).zero_()))
         elif self.args.model == "rrnn":
             init_input = self.init_input(batch_size)
-            emb = self.input_drop(self.embedding_layer(init_input))
-            output, hidden, _ = self.rnn(emb, None)
+            emb = self.input_drop(self.emb_layer(init_input))
+            output, hidden, _ = self.encoder(emb, None)
             return hidden
         else:
             assert False
@@ -188,7 +199,7 @@ class Model(nn.Module):
         batch_size = 1
         hidden = self.init_hidden(batch_size)
         hidden = repackage_hidden(self.args, hidden)
-        output, hidden, _ = self.rnn(emb, hidden)
+        output, hidden, _ = self.encoder(emb, hidden)
         output = output.view(-1, output.size(2))
         output = self.output_layer(output)
 
@@ -201,9 +212,7 @@ class Model(nn.Module):
 
     def print_pnorm(self):
         norms = [ "{:.0f}".format(x.norm().data[0]) for x in self.parameters() ]
-        sys.stdout.write("\tp_norm: {}\n".format(
-            norms
-        ))
+        print_and_log("\tp_norm: {}\n".format(norms), self.logging_file)
 
 
 def repackage_hidden(args, hidden):
@@ -224,7 +233,7 @@ def repackage_hidden(args, hidden):
         assert False
 
 
-def train_model(model):
+def train_model(model, logging_file):
     args = model.args
     unchanged, best_dev = 0, 200
 
@@ -234,7 +243,7 @@ def train_model(model):
 
     trainer = SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
-    map_to_ids = model.embedding_layer.map_to_ids
+    map_to_ids = model.emb_layer.map_to_ids
     train = read_corpus(args.train, shuffle=False)
     train = create_batches(train, map_to_ids, args.batch_size, cuda=args.gpu)
     dev = read_corpus(args.dev)
@@ -242,13 +251,15 @@ def train_model(model):
     test = read_corpus(args.test)
     test = create_batches(test, map_to_ids, 1, cuda=args.gpu)
     for epoch in range(args.max_epoch):
-
+        
         start_time = time.time()
 
         N = (len(train[0]) - 1) // unroll_size + 1
         hidden = model.init_hidden(batch_size)
         total_loss, cur_loss = 0.0, 0.0
+
         for i in range(N):
+
             model.train()
             x = train[0][i*unroll_size:(i+1)*unroll_size]
             y = train[1][i*unroll_size:(i+1)*unroll_size].view(-1)
@@ -259,9 +270,29 @@ def train_model(model):
             hidden = repackage_hidden(args, hidden)
             assert x.size(1) == batch_size
             loss = criterion(output, y) / x.size(1)
+
+            # to add the sparsifying regularizer
+            
+            if args.sparsity_type == "none":
+                reg_loss = loss
+                regularization_term = 0
+            else:
+                regularization_groups = train_classifier.get_regularization_groups(model, args)
+                
+                regularization_term = regularization_groups.sum()
+                
+                if args.reg_strength_multiple_of_loss and args.reg_strength == 0:
+                    args.reg_strength = loss.data[0]*args.reg_strength_multiple_of_loss/regularization_term.data[0]
+
+                if args.prox_step:
+                    reg_loss = loss
+                else:
+                    reg_loss = loss + args.reg_strength * regularization_term
+            loss = reg_loss
+            
             loss.backward()
             if math.isnan(loss.data[0]) or math.isinf(loss.data[0]):
-                print ("nan/inf loss encoutered in training.")
+                print_and_log("nan/inf loss encoutered in training.", logging_file)
                 sys.exit(0)
                 return
             total_loss += loss.data[0] / x.size(0)
@@ -276,65 +307,82 @@ def train_model(model):
                     p.data.add_(-args.lr, p.grad.data)
 
             if (i + 1) % args.eval_ite == 0:
+
                 dev_ppl = eval_model(model, dev)
-                sys.stdout.write("| Epoch={} | ite={} | lr={:.4f} | train_ppl={:.2f} | dev_ppl={:.2f} |"
+                print_and_log("| Epoch={} | ite={} | lr={:.4f} | train_ppl={:.2f} | dev_ppl={:.2f} |"
                                  "\n".format(
                     epoch,
                     i+1,
                     trainer.defaults["lr"],
                     np.exp(cur_loss / args.eval_ite),
                     dev_ppl
-                ))
+                                 ), logging_file)
                 model.print_pnorm()
                 sys.stdout.flush()
+                #import pdb; pdb.set_trace()
                 cur_loss = 0.0
 
                 if dev_ppl < best_dev:
                     unchanged = 0
                     best_dev = dev_ppl
                     test_ppl = eval_model(model, test)
-                    sys.stdout.write("\t[eval]  test_ppl={:.2f}\n".format(
+                    print_and_log("\t[eval]  test_ppl={:.2f}\n".format(
                         test_ppl
-                    ))
+                    ), logging_file)
                     sys.stdout.flush()
+            # DEBUG
+            if args.sparsity_type == "states" and False:
+                import save_learned_structure
+                new_model, new_d_out = save_learned_structure.extract_learned_structure(model, args, epoch)
+                if new_model is not None:
+                    new_model_valid_err = eval_model(niter, new_model, valid_x, valid_y)
+                else:
+                    new_model_valid_err = 0.0
 
+            
+        # saving the group norms to the logging file. if args.sparsity_type isn't one of the regularized sparsities, it does notihng   
+        regularization_groups = train_classifier.get_regularization_groups(model, args)
+        train_classifier.log_groups(model, args, logging_file, regularization_groups)
+        
         train_ppl = np.exp(total_loss/N)
         dev_ppl = eval_model(model, dev)
 
-        sys.stdout.write("-" * 89 + "\n")
-        sys.stdout.write("| End of epoch {} | lr={:.4f} | train_ppl={:.2f} | dev_ppl={:.2f} |"
+        print_and_log("-" * 89 + "\n", logging_file)
+        print_and_log("| End of epoch {} | lr={:.4f} | train_ppl={:.2f} | dev_ppl={:.2f} |"
                          "[{:.2f}m] |\n".format(
             epoch,
             trainer.defaults["lr"],
             train_ppl,
             dev_ppl,
             (time.time() - start_time) / 60.0
-        ))
-        sys.stdout.write("-" * 89 + "\n")
+                         ), logging_file)
+        print_and_log("-" * 89 + "\n", logging_file)
         model.print_pnorm()
         sys.stdout.flush()
 
+
+        
         if dev_ppl < best_dev:
             unchanged = 0
             best_dev = dev_ppl
             start_time = time.time()
             test_ppl = eval_model(model, test)
-            sys.stdout.write("\t[eval]  test_ppl={:.2f}\t[{:.2f}m]\n".format(
+            print_and_log("\t[eval]  test_ppl={:.2f}\t[{:.2f}m]\n".format(
                 test_ppl,
                 (time.time() - start_time) / 60.0
-            ))
+            ), logging_file)
             sys.stdout.flush()
         else:
             unchanged += 1
         if args.lr_decay_epoch > 0 and epoch >= args.lr_decay_epoch:
             args.lr *= args.lr_decay
         if unchanged >= args.patience:
-            sys.stdout.write("Reached " + str(args.patience)
-                             + " iterations without improving dev loss. Reducing learning rate.")
+            print_and_log("Reached " + str(args.patience)
+                             + " iterations without improving dev loss. Reducing learning rate.", logging_file)
             args.lr /= 2
             unchanged = 0
         trainer.defaults["lr"] = args.lr
-        sys.stdout.write("\n")
+        print_and_log("\n", logging_file)
     return
 
 
@@ -363,180 +411,60 @@ def eval_model(model, valid):
     return ppl
 
 
-def get_states_weights(model, args):
-    embed_dim = model.emb_layer.n_d
-    num_edges_in_wfsa = model.encoder.rnn_lst[0].cells[0].k
-    num_wfsas = int(args.d_out)
-
-    reshaped_weights = model.encoder.rnn_lst[0].cells[0].weight.view(embed_dim, num_wfsas, num_edges_in_wfsa)
-    if len(model.encoder.rnn_lst) > 1:
-        reshaped_second_layer_weights = model.encoder.rnn_lst[1].cells[0].weight.view(num_wfsas, num_wfsas,
-                                                                                      num_edges_in_wfsa)
-        reshaped_weights = torch.cat((reshaped_weights, reshaped_second_layer_weights), 0)
-    elif len(model.encoder.rnn_lst) > 2:
-        assert False, "This regularization is only implemented for 2-layer networks."
-
-    # to stack the transition and self-loops, so e.g. states[...,0] contains the transition and self-loop weights
-
-    states = torch.cat((reshaped_weights[..., 0:int(num_edges_in_wfsa / 2)],
-                        reshaped_weights[..., int(num_edges_in_wfsa / 2):num_edges_in_wfsa]), 0)
-    return states
-
-
-# this computes the group lasso penalty term
-def get_regularization_groups(model, args):
-    if args.sparsity_type == "wfsa":
-        embed_dim = model.emb_layer.n_d
-        num_edges_in_wfsa = model.encoder.rnn_lst[0].k
-        reshaped_weights = model.encoder.rnn_lst[0].weight.view(embed_dim, args.d_out, num_edges_in_wfsa)
-        l2_norm = reshaped_weights.norm(2, dim=0).norm(2, dim=1)
-        return l2_norm
-    elif args.sparsity_type == 'edges':
-        return model.encoder.rnn_lst[0].weight.norm(2, dim=0)
-    elif args.sparsity_type == 'states':
-        states = get_states_weights(model, args)
-        return states.norm(2, dim=0)  # a num_wfsa by n-gram matrix
-    elif args.sparsity_type == "rho_entropy":
-        assert args.depth == 1, "rho_entropy regularization currently implemented for single layer networks"
-        bidirectional = model.encoder.rnn_lst[0].cells[0].bidirectional
-        assert not bidirectional, "bidirectional not implemented"
-
-        num_edges_in_wfsa = model.encoder.rnn_lst[0].cells[0].k
-        num_wfsas = int(args.d_out)
-        bias_final = model.encoder.rnn_lst[0].cells[0].bias_final
-
-        sm = nn.Softmax(dim=2)
-        # the 1 in the line below is for non-bidirectional models, would be 2 for bidirectional
-        rho = sm(bias_final.view(1, num_wfsas, int(num_edges_in_wfsa / 2)))
-        entropy_to_sum = rho * rho.log() * -1
-        entropy = entropy_to_sum.sum(dim=2)
-        return entropy
-
-
-def log_groups(model, args, logging_file, groups=None):
-    if groups is not None:
-
-        if args.sparsity_type == "rho_entropy":
-            num_edges_in_wfsa = model.encoder.rnn_lst[0].cells[0].k
-            num_wfsas = int(args.d_out)
-            bias_final = model.encoder.rnn_lst[0].cells[0].bias_final
-
-            sm = nn.Softmax(dim=2)
-            # the 1 in the line below is for non-bidirectional models, would be 2 for bidirectional
-            rho = sm(bias_final.view(1, num_wfsas, int(num_edges_in_wfsa / 2)))
-            logging_file.write(str(rho))
-
-        else:
-            logging_file.write(str(groups))
-    else:
-        if args.sparsity_type == "wfsa":
-            embed_dim = model.emb_layer.n_d
-            num_edges_in_wfsa = model.encoder.rnn_lst[0].k
-            reshaped_weights = model.encoder.rnn_lst[0].weight.view(embed_dim, args.d_out, num_edges_in_wfsa)
-            l2_norm = reshaped_weights.norm(2, dim=0).norm(2, dim=1)
-            logging_file.write(str(l2_norm))
-
-        elif args.sparsity_type == 'edges':
-            embed_dim = model.emb_layer.n_d
-            num_edges_in_wfsa = model.encoder.rnn_lst[0].k
-            reshaped_weights = model.encoder.rnn_lst[0].weight.view(embed_dim, args.d_out, num_edges_in_wfsa)
-            logging_file.write(str(reshaped_weights.norm(2, dim=0)))
-            # model.encoder.rnn_lst[0].weight.norm(2, dim=0)
-        elif args.sparsity_type == 'states':
-            assert False, "can implement this based on get_regularization_groups, but that keeps changing"
-            logging_file.write(str(states.norm(2, dim=0)))  # a num_wfsa by n-gram matrix
-
-
-def init_logging(args):
-    dir_path = "/home/jessedd/projects/rational-recurrences/classification/logging/" + args.dataset + "/"
-    filename = args.filename() + ".txt"
-
-    if not os.path.exists(dir_path):
-        os.mkdir(dir_path)
-
-    if not os.path.exists(dir_path + args.filename_prefix):
-        os.mkdir(dir_path + args.filename_prefix)
-
-    torch.set_printoptions(threshold=5000)
-
-    logging_file = open(dir_path + filename, "w")
-
-    tmp = args.loaded_embedding
-    args.loaded_embedding = True
-    logging_file.write(str(args))
-    args.loaded_embedding = tmp
-
-    # print(args)
-    print("saving in {}".format(args.dataset + args.filename()))
-    return logging_file
-
-
-def regularization_stop(args, model):
-    if args.sparsity_type == "states" and args.prox_step:
-        states = get_states_weights(model, args)
-        if states.norm(2, dim=0).sum().data[0] == 0:
-            return True
-    else:
-        return False
-
-
-# following https://en.wikipedia.org/wiki/Proximal_gradient_methods_for_learning#Group_lasso
-# w_g - args.reg_strength * (w_g / ||w_g||_2)
-def prox_step(model, args):
-    if args.sparsity_type == "states":
-
-        states = get_states_weights(model, args)
-        num_states = states.shape[2]
-
-        embed_dim = model.emb_layer.n_d
-        num_edges_in_wfsa = model.encoder.rnn_lst[0].cells[0].k
-        num_wfsas = int(args.d_out)
-
-        reshaped_weights = model.encoder.rnn_lst[0].cells[0].weight.view(embed_dim, num_wfsas, num_edges_in_wfsa)
-        if len(model.encoder.rnn_lst) > 1:
-            assert False, "This regularization is only implemented for 2-layer networks."
-
-        first_weights = reshaped_weights[..., 0:int(num_edges_in_wfsa / 2)]
-        second_weights = reshaped_weights[..., int(num_edges_in_wfsa / 2):num_edges_in_wfsa]
-
-        for i in range(num_wfsas):
-            for j in range(num_states):
-                cur_group = states[:, i, j].data
-                cur_first_weights = first_weights[:, i, j].data
-                cur_second_weights = second_weights[:, i, j].data
-                if cur_group.norm(2) < args.reg_strength:
-                    # cur_group.add_(-cur_group)
-                    cur_first_weights.add_(-cur_first_weights)
-                    cur_second_weights.add_(-cur_second_weights)
-                else:
-                    # cur_group.add_(-args.reg_strength*cur_group/cur_group.norm(2))
-                    cur_first_weights.add_(-args.reg_strength * cur_first_weights / cur_group.norm(2))
-                    cur_second_weights.add_(-args.reg_strength * cur_second_weights / cur_group.norm(2))
-    else:
-        assert False, "haven't implemented anything else"
 
 
 def main(args):
+    logging_file = train_classifier.init_logging(args)
     torch.manual_seed(args.seed)
     train = read_corpus(args.train, shuffle=False)
     model = Model(train, args)
+    model.logging_file = logging_file
     if args.gpu:
         model.cuda()
-    sys.stdout.write("vocab size: {}\n".format(
-        model.embedding_layer.n_V
-    ))
+    print_and_log("vocab size: {}\n".format(
+        model.emb_layer.n_V
+    ), logging_file)
     num_params = sum(x.numel() for x in model.parameters() if x.requires_grad)
     # if args.model == "rrnn":
         # num_in = args.depth * (2 * args.d)
         # num_params = num_params - num_in
     
-    sys.stdout.write("num of parameters: {}\n".format(num_params))
+    print_and_log("num of parameters: {}\n".format(num_params), logging_file)
     sys.stdout.flush()
     model.print_pnorm()
-    sys.stdout.write("\n")
+    print_and_log("\n", logging_file)
 
-    train_model(model)
+    train_model(model, logging_file)
     return
+
+def print_and_log(string, logging_file):
+    sys.stdout.write(string)
+    logging_file.write(string)
+    logging_file.flush()
+
+def generate_filename(args):
+    if args.sparsity_type == "none" and args.learned_structure:
+        sparsity_name = args.learned_structure
+    else:
+        sparsity_name = args.sparsity_type
+
+    name = "layers={}_lr={:.3E}_dout={}_indrop={:.4f}_outdrop={:.4f}_drop={:.4f}_wdecay={:.2E}_clip={:.2f}_pattern={}_sparsity={}".format(
+        args.depth, args.lr, args.d_out, args.input_dropout, args.output_dropout,
+        args.dropout, args.weight_decay, args.clip_grad, args.pattern, sparsity_name)
+    if args.reg_strength > 0:
+        name += "_regstr={:.3E}".format(args.reg_strength)
+    if args.filename_suffix != "":
+        name += args.filename_suffix
+    if args.filename_prefix != "":
+        name = args.filename_prefix + "_" + name
+    if not args.gpu:
+        name = name + "_cpu"
+    if args.semiring == 'max_plus':
+        name = name + "_mp"
+    elif args.semiring == 'max_times':
+        name = name + "_mt"
+
+    args.filename = name + ".txt"
 
 
 def str2bool(v):
@@ -564,8 +492,8 @@ if __name__ == "__main__":
     argparser.add_argument("--batch_size", "--batch", type=int, default=32)
     argparser.add_argument("--unroll_size", type=int, default=35)
     argparser.add_argument("--max_epoch", type=int, default=300)
-    argparser.add_argument("--d", type=int, default=32)
-    argparser.add_argument("--hidden_size", type=str, default="8,8,8,8")
+    argparser.add_argument("--input_size", type=int, default=32)
+    argparser.add_argument("--d_out", type=str, default="8,8,8,8")
     argparser.add_argument("--input_dropout", type=float, default=0.0,
         help="dropout of word embeddings")
     argparser.add_argument("--output_dropout", type=float, default=0.0,
@@ -585,8 +513,18 @@ if __name__ == "__main__":
     argparser.add_argument("--eval_ite", type=int, default=100)
     argparser.add_argument("--patience", type=int, default=30)
     argparser.add_argument("--sparsity_type", type=str, default="none")
-
+    argparser.add_argument("--logging_dir", type=str, default="./logging/")
+    argparser.add_argument("--filename_prefix", type=str, default="")
+    argparser.add_argument("--filename_suffix", type=str, default="")
+    argparser.add_argument("--reg_strength", type=float, default=0)
+    argparser.add_argument("--loaded_embedding", type=bool, default=False)
+    argparser.add_argument("--loaded_data", type=bool, default=False)
+    argparser.add_argument("--reg_strength_multiple_of_loss", type=bool, default=False)
+    argparser.add_argument("--prox_step", type=bool, default=False)
+    
     args = argparser.parse_args()
+    args.language_modeling = True
     print(args)
     sys.stdout.flush()
+    generate_filename(args)
     main(args)

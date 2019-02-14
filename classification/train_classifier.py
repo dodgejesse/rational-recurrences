@@ -11,8 +11,8 @@ from termcolor import colored
 
 
 from tensorboardX import SummaryWriter
-
-sys.path.append("..")
+if ".." not in sys.path:
+    sys.path.append("..")
 import classification.dataloader as dataloader
 import classification.modules as modules
 from semiring import *
@@ -39,7 +39,7 @@ class Model(nn.Module):
 
         if args.model == "lstm":
             self.encoder = nn.LSTM(
-                emb_layer.n_d,
+                emb_layer.input_size,
                 args.d_out,
                 args.depth,
                 dropout=args.dropout,
@@ -58,7 +58,7 @@ class Model(nn.Module):
                               "`max_plus`, `max_times`], not {}".format(args.semiring)
             self.encoder = rrnn.RRNN(
                 self.semiring,
-                emb_layer.n_d,
+                emb_layer.input_size,
                 args.d_out,
                 args.depth,
                 pattern=args.pattern,
@@ -147,34 +147,47 @@ def eval_model(niter, model, valid_x, valid_y):
 
 def get_states_weights(model, args):
 
-    embed_dim = model.emb_layer.n_d
+
+    embed_dim = model.emb_layer.input_size
     num_edges_in_wfsa = model.encoder.rnn_lst[0].cells[0].k
-    num_wfsas = int(args.d_out)
+    ngram = model.encoder.rnn_lst[0].cells[0].ngram
+    num_wfsas = sum([int(one_size) for one_size in args.d_out.split(";")[0].split(",")])
+    bidir = int(model.encoder.bidirectional)
+    assert bidir == 0, "bidirectional models haven't been implemented yet"
+    assert len(model.encoder.rnn_lst[0].cells) == 1, "l1 regularization is only implemented for models where all wfsas are the same size."
     
     reshaped_weights = model.encoder.rnn_lst[0].cells[0].weight.view(embed_dim, num_wfsas, num_edges_in_wfsa)
+    # DEBUG check that this is also added wherever else we use it.
+    bias = model.encoder.rnn_lst[0].cells[0].bias.view(1, num_edges_in_wfsa, num_wfsas)
+
+    # to handle multi-layer rnns
     if len(model.encoder.rnn_lst) > 1:
         reshaped_second_layer_weights = model.encoder.rnn_lst[1].cells[0].weight.view(num_wfsas, num_wfsas, num_edges_in_wfsa)
-        reshaped_weights = torch.cat((reshaped_weights, reshaped_second_layer_weights), 0)
+        reshaped_weights = torch.cat((reshaped_weights, reshaped_second_layer_weights), 1)
+
+        reshaped_second_layer_bias = model.encoder.rnn_lst[1].cells[0].bias.view(1, num_edges_in_wfsa, num_wfsas)
+        bias = torch.cat((bias, reshaped_second_layer_bias),2)
     elif len(model.encoder.rnn_lst) > 2:
         assert False, "This regularization is only implemented for 2-layer networks."
-            
-    # to stack the transition and self-loops, so e.g. states[...,0] contains the transition and self-loop weights
 
-    states = torch.cat((reshaped_weights[...,0:int(num_edges_in_wfsa/2)],
-                        reshaped_weights[...,int(num_edges_in_wfsa/2):num_edges_in_wfsa]),0)
-
-    # to stack the bias terms on as well
-    # DEBUG check that this is also added wherever else we use it.
-    bias = model.encoder.rnn_lst[0].cells[0].bias.view(num_edges_in_wfsa, len(model.encoder.rnn_lst), num_wfsas)
-    bias = bias[int(bias.shape[0]/2):bias.shape[0],...].transpose(0,2).transpose(0,1)
-    states = torch.cat((states, bias), 0)
+    # if output gate is used (like in language modeling), remove the weights associated with it. those weights apply to the whole
+    # wfsa, not to individual states.
+    if num_edges_in_wfsa % 2 == 1:
+        reshaped_weights = reshaped_weights[..., 0:num_edges_in_wfsa-1]
+        bias = bias[:,0:num_edges_in_wfsa-1,:]
     
+    # to stack the transition and self-loops, so e.g. states[...,0] contains the transition and self-loop weights
+    states = torch.cat((reshaped_weights[...,0:ngram],
+                        reshaped_weights[...,ngram:ngram*2]),0)
+    bias = bias[:,ngram:ngram*2,:].transpose(1,2)
+    states = torch.cat((states, bias), 0)
+
     return states
 
 # this computes the group lasso penalty term
 def get_regularization_groups(model, args):
     if args.sparsity_type == "wfsa":
-        embed_dim = model.emb_layer.n_d
+        embed_dim = model.emb_layer.input_size
         num_edges_in_wfsa = model.encoder.rnn_lst[0].k
         reshaped_weights = model.encoder.rnn_lst[0].weight.view(embed_dim, args.d_out, num_edges_in_wfsa)
         l2_norm = reshaped_weights.norm(2, dim=0).norm(2, dim=1)
@@ -220,14 +233,14 @@ def log_groups(model, args, logging_file, groups=None):
             logging_file.write(str(groups))
     else:
         if args.sparsity_type == "wfsa":
-            embed_dim = model.emb_layer.n_d
+            embed_dim = model.emb_layer.input_size
             num_edges_in_wfsa = model.encoder.rnn_lst[0].k
             reshaped_weights = model.encoder.rnn_lst[0].weight.view(embed_dim, args.d_out, num_edges_in_wfsa)
             l2_norm = reshaped_weights.norm(2, dim=0).norm(2, dim=1)
             logging_file.write(str(l2_norm))
             
         elif args.sparsity_type == 'edges':
-            embed_dim = model.emb_layer.n_d
+            embed_dim = model.emb_layer.input_size
             num_edges_in_wfsa = model.encoder.rnn_lst[0].k
             reshaped_weights = model.encoder.rnn_lst[0].weight.view(embed_dim, args.d_out, num_edges_in_wfsa)
             logging_file.write(str(reshaped_weights.norm(2, dim=0)))
@@ -235,6 +248,7 @@ def log_groups(model, args, logging_file, groups=None):
         elif args.sparsity_type == 'states':
             assert False, "can implement this based on get_regularization_groups, but that keeps changing"
             logging_file.write(str(states.norm(2,dim=0))) # a num_wfsa by n-gram matrix
+    logging_file.flush()
     
 
 def init_logging(args):
@@ -252,7 +266,7 @@ def init_logging(args):
     if not os.path.exists(dir_path + args.filename_prefix):
         os.mkdir(dir_path + args.filename_prefix)
 
-    torch.set_printoptions(threshold=5000)
+    torch.set_printoptions(threshold=500000)
         
     logging_file = open(dir_path + filename, "w")
 
@@ -289,7 +303,7 @@ def prox_step(model, args):
         states = get_states_weights(model, args)
         num_states = states.shape[2]
 
-        embed_dim = model.emb_layer.n_d
+        embed_dim = model.emb_layer.input_size
         num_edges_in_wfsa = model.encoder.rnn_lst[0].cells[0].k
         num_wfsas = int(args.d_out)
     

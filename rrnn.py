@@ -718,7 +718,6 @@ class RRNNCell(nn.Module):
                     cs = self.semiring.plus(cs, c)
 
         if self.use_output_gate:
-            # assert False, "THIS HASN'T BEEN IMPLEMENTED YET!"
             gcs = self.calc_activation(output*cs)
         else:
             gcs = self.calc_activation(cs)
@@ -830,7 +829,7 @@ class RRNN(nn.Module):
     def __init__(self,
                  semiring,
                  input_size,
-                 hidden_size,
+                 d_out,
                  num_layers,
                  pattern="bigram",
                  dropout=0.2,
@@ -850,9 +849,9 @@ class RRNN(nn.Module):
         assert not bidirectional
         self.semiring = semiring
         self.input_size = input_size
-        self.hidden_size = [int(one_size) for one_size in hidden_size.split(",")]
+        self.d_out = [[int(one_size) for one_size in cur_d_out.split(",")] for cur_d_out in d_out.split(";")]
         self.num_layers = num_layers
-        self.pattern = [one_pattern for one_pattern in pattern.split(",")]
+        self.pattern = [[one_pattern for one_pattern in cur_pattern.split(",")] for cur_pattern in pattern.split(";")]
         self.dropout = dropout
         self.rnn_dropout = rnn_dropout
         self.rnn_lst = nn.ModuleList()
@@ -860,10 +859,12 @@ class RRNN(nn.Module):
         self.bidirectional = bidirectional
         self.use_layer_norm = layer_norm
         self.use_wieght_norm = weight_norm
-        #self.out_size = hidden_size * 2 if bidirectional else hidden_size
+        #self.out_size = d_out * 2 if bidirectional else d_out
 
-        assert len(self.hidden_size) == len(self.pattern), "each n-gram must have an output size."
-
+        assert len(self.d_out) == len(self.pattern), "each n-gram must have an output size."
+        
+        assert len(self.pattern) == len(self.d_out) and len(self.pattern) == self.num_layers, "same num patterns, d_outs, and layers"
+        
         if use_tanh + use_relu + use_selu > 1:
             sys.stderr.write("\nWARNING: More than one activation enabled in RRNN"
                 " (tanh: {}  relu: {}  selu: {})\n".format(use_tanh, use_relu, use_selu)
@@ -872,9 +873,9 @@ class RRNN(nn.Module):
         for i in range(num_layers):
             l = RRNNLayer(
                 semiring=semiring,
-                n_in=self.input_size if i == 0 else sum(self.hidden_size),
-                n_out=self.hidden_size,
-                pattern=self.pattern,
+                n_in=self.input_size if i == 0 else sum(self.d_out[i-1]),
+                n_out=self.d_out[i],
+                pattern=self.pattern[i],
                 dropout=dropout if i+1 != num_layers else 0.,
                 rnn_dropout=rnn_dropout,
                 bidirectional=bidirectional,
@@ -891,7 +892,7 @@ class RRNN(nn.Module):
             )
             self.rnn_lst.append(l)
             if layer_norm:
-                self.ln_lst.append(LayerNorm(self.hidden_size))
+                self.ln_lst.append(LayerNorm(self.d_out))
 
     def init_weights(self):
         for l in self.rnn_lst:

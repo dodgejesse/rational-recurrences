@@ -1,12 +1,16 @@
 import torch
 import train_classifier
 import numpy as np
-import os
+import os, sys
+#sys.path.append("../language_model/")
+import train_lm
+
 
 THRESHOLD = 0.1
 ALLWFSA = None
 
 def to_file(model, filepath, args, data_x, data_y):
+
     new_model, new_d_out = extract_learned_structure(model, args)
     check_new_model_predicts_same(model, new_model, data_x, data_y)
 
@@ -106,24 +110,36 @@ def encoder_fwd(model, cur_x):
     return feat
 
 def extract_learned_structure(model, args, epoch = 0):
-    
+
     states = train_classifier.get_states_weights(model, args)
-    num_wfsas = int(args.d_out)
-    num_ngrams, num_of_each_ngram = find_num_ngrams(states, num_wfsas)
+    num_wfsas = sum([int(one_size) for one_size in args.d_out.split(";")[0].split(",")])
+    layers = len(model.encoder.rnn_lst)
+    num_ngrams_per_layer = []
+    num_of_each_ngram_per_layer = []
+    for i in range(layers):
+        cur_layer_states = states[:,i*num_wfsas:(i+1)*num_wfsas,:]
+        num_ngrams, num_of_each_ngram = find_num_ngrams(cur_layer_states, num_wfsas)
    
-    if max(num_ngrams) == -1:
-        return None, 0
+        if max(num_ngrams) == -1:
+            return None, 0
 
-    new_model, new_d_out = create_new_model(num_of_each_ngram, args, model)
+        num_ngrams_per_layer.append(num_ngrams)
+        num_of_each_ngram_per_layer.append(num_of_each_ngram)
 
-    update_new_model_weights(model, new_model, num_ngrams, args)
+    new_model, new_d_out = create_new_model(num_of_each_ngram_per_layer, args, model, layers)
+    update_new_model_weights(model, new_model, num_ngrams_per_layer, args)
+    
     return new_model, new_d_out
 
 # all weights are either "model" weights or "new_model" weights, as denoted in the name of the local variable
 def update_new_model_weights(model, new_model, num_ngrams, args):
-    embed_dim = model.emb_layer.n_d
-    num_edges_in_wfsa = model.encoder.rnn_lst[0].cells[0].k
-    num_wfsas = int(args.d_out)
+    embed_dim = model.emb_layer.input_size
+    import pdb; pdb.set_trace()
+    print("need to extract the weights that are non-zero, and if any are non-zero for a particular wfsa, " +
+          "should also extract the final column, which contains the output gate weights.")
+    num_edges_in_wfsa = model.encoder.rnn_lst[0].cells[0].ngram * 2
+    num_wfsas = sum([int(one_size) for one_size in args.d_out.split(";")[0].split(",")])
+
     reshaped_model_weights = model.encoder.rnn_lst[0].cells[0].weight.view(embed_dim, num_wfsas, num_edges_in_wfsa)
 
     cur_cell_num = 0
@@ -215,25 +231,40 @@ def update_mult_weights(model, reshaped_model_weights, new_model, wfsa_indices, 
     cur_new_model_weights_data.add_(cur_model_weights_data)
         
         
-def create_new_model(num_of_each_ngram, args, model):
+def create_new_model(num_of_each_ngram, args, model, layers):
     # to store the current d_out and pattern
     tmp_d_out = args.d_out
     tmp_pattern = args.pattern
 
-    # to generate the new learned d_out
     new_d_out = ""
-    for i in range(len(num_of_each_ngram)):
-        new_d_out += "{},".format(num_of_each_ngram[i])
-    new_d_out = new_d_out[:-1]
+    new_pattern = ""
+    # semi-colon separated d_outs, one for each layer
+    for layer in range(layers):
 
-    new_pattern = "1-gram,2-gram,3-gram,4-gram"
+        # to generate the new learned d_out
+        new_d_out += ";"
+        cur_num_of_each_ngram = num_of_each_ngram[layer]
+        
+        for i in range(len(cur_num_of_each_ngram)):
+            new_d_out += "{},".format(cur_num_of_each_ngram[i])
+        new_d_out = new_d_out[:-1]
 
+        new_pattern += ";1-gram,2-gram,3-gram,4-gram"
+
+    # to remove the initial semicolon
+    new_d_out = new_d_out[1:]
+    new_pattern = new_pattern[1:]
+        
     # setting the new d_out and pattern in args
     args.d_out = new_d_out
     args.pattern = new_pattern
 
+    #import pdb; pdb.set_trace()
     # creating the new model
-    new_model = train_classifier.Model(args, model.emb_layer, model.out.out_features)
+    if args.language_modeling:
+        new_model = train_lm.Model(model.emb_layer.word2id.keys(), args)
+    else:
+        new_model = train_classifier.Model(args, model.emb_layer, model.out.out_features)
     if args.gpu:
         new_model.cuda()
 
