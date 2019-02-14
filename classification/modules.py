@@ -40,7 +40,7 @@ class EmbeddingLayer(nn.Module):
         self.bert_embed = bert_embed
         if bert_embed:
             self.word2id = None
-            self.n_d = len(words[0][0])
+            self.input_size = len(words[0][0])
             return
         
         if embs is not None:
@@ -48,9 +48,9 @@ class EmbeddingLayer(nn.Module):
             for word in embwords:
                 assert word not in word2id, "Duplicate words in pre-trained embeddings"
                 word2id[word] = len(word2id)
-            n_d = len(embvecs[0])
+            input_size = len(embvecs[0])
             sys.stdout.write("{} pre-trained word embeddings with dim={} loaded.\n".format(len(word2id),
-                                                                                           n_d))
+                                                                                           input_size))
         for w in deep_iter(words):
             if w not in word2id:
                 word2id[w] = len(word2id)
@@ -64,12 +64,12 @@ class EmbeddingLayer(nn.Module):
         if eos not in word2id:
             word2id[eos] = len(word2id)
         self.word2id = word2id
-        self.n_V, self.n_d = len(word2id), n_d
+        self.n_V, self.input_size = len(word2id), input_size
         self.oovid = word2id[oov]
         self.padid = word2id[pad]
         self.sosid = word2id[sos]
         self.eosid = word2id[eos]
-        self.embedding = nn.Embedding(self.n_V, n_d)
+        self.embedding = nn.Embedding(self.n_V, input_size)
         self.embedding.weight.data.uniform_(-0.25, 0.25)
 
         if embs is not None:
@@ -82,7 +82,7 @@ class EmbeddingLayer(nn.Module):
             if norms.dim() == 1:
                 norms = norms.unsqueeze(1)
             weight.data.div_(norms.expand_as(weight.data))
-        pad_vec = np.zeros((1, n_d), dtype=np.float32)
+        pad_vec = np.zeros((1, input_size), dtype=np.float32)
         self.embedding.weight.data[self.padid:self.padid+1,:].copy_(torch.from_numpy(pad_vec))
         if fix_emb:
             self.embedding.weight.requires_grad = False
