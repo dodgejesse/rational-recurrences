@@ -629,7 +629,6 @@ class RRNNCell(nn.Module):
             x = input * mask.expand_as(input)
         else:
             x = input
-
         x_2d = x if x.dim() == 2 else x.contiguous().view(-1, n_in)
 
         weight_in = self.weight if not self.weight_norm else self.apply_weight_norm()
@@ -862,7 +861,6 @@ class RRNN(nn.Module):
         #self.out_size = d_out * 2 if bidirectional else d_out
 
         assert len(self.d_out) == len(self.pattern), "each n-gram must have an output size."
-        
         assert len(self.pattern) == len(self.d_out) and len(self.pattern) == self.num_layers, "same num patterns, d_outs, and layers"
         
         if use_tanh + use_relu + use_selu > 1:

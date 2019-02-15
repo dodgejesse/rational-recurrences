@@ -24,7 +24,6 @@ import train_classifier
 
 SOS, EOS = "<s>", "</s>"
 
-
 def read_corpus(path, sos=None, eos="</s>", shuffle=False):
     data = [ ]
     if sos is not None:
@@ -52,7 +51,7 @@ def create_batches(data_text, map_to_ids, batch_size, cuda=False):
 
 
 class EmbeddingLayer(nn.Module):
-    def __init__(self, input_size, words, sos=SOS, fix_emb=False):
+    def __init__(self, emb_size, words, sos=SOS, fix_emb=False):
         super(EmbeddingLayer, self).__init__()
         word2id, id2word = {}, {}
         if sos not in word2id:
@@ -63,8 +62,8 @@ class EmbeddingLayer(nn.Module):
                 word2id[w] = len(word2id)
                 id2word[word2id[w]] =w
         self.word2id, self.id2word = word2id, id2word
-        self.n_V, self.input_size = len(word2id), input_size
-        self.embedding = nn.Embedding(self.n_V, input_size)
+        self.n_V, self.emb_size = len(word2id), emb_size
+        self.embedding = nn.Embedding(self.n_V, emb_size)
         self.sosid = word2id[sos]
 
     def forward(self, x):
@@ -83,12 +82,12 @@ class Model(nn.Module):
         super(Model, self).__init__()
         self.args = args
 
-        self.input_size = args.input_size
+        self.emb_size = args.emb_size
         self.depth = args.depth
         self.drop = nn.Dropout(args.dropout)
         self.input_drop = nn.Dropout(args.input_dropout)
         self.output_drop = nn.Dropout(args.output_dropout)
-        self.emb_layer = EmbeddingLayer(self.input_size, words)
+        self.emb_layer = EmbeddingLayer(self.emb_size, words)
         self.n_V = self.emb_layer.n_V
         self.num_mlp_layer = args.num_mlp_layer
 
@@ -104,11 +103,18 @@ class Model(nn.Module):
 
         if args.model == "lstm":
             self.encoder=nn.LSTM(
-                self.input_size, self.input_size,
+                self.emb_size, self.emb_size,
                 self.depth,
                 dropout = args.rnn_dropout
             )
         elif args.model == "rrnn":
+            first_layer_d_in = args.d_out.split(";")[0]
+            final_layer_d_out = args.d_out.split(";")[-1]
+            num_wfsa_input = sum([int(one_size) for one_size in first_layer_d_in.split(",")])
+            num_wfsa_output = sum([int(one_size) for one_size in final_layer_d_out.split(",")])
+
+            self.input_layer = nn.Linear(self.emb_size, num_wfsa_input)
+            self.output_layer = nn.Linear(self.emb_size, self.n_V)
             if args.semiring == "plus_times":
                 self.semiring = PlusTimesSemiring
             elif args.semiring == "max_plus":
@@ -117,7 +123,7 @@ class Model(nn.Module):
                 assert False, "Semiring should either be plus_times or max_plus, not {}".format(args.semiring)
             self.encoder = rrnn.RRNN(
                 self.semiring,
-                self.input_size,
+                num_wfsa_input,
                 args.d_out,
                 self.depth,
                 pattern=args.pattern,
@@ -131,15 +137,14 @@ class Model(nn.Module):
             )
         else:
             assert False
+
         if args.num_mlp_layer == 2:
-            self.hidden = nn.Linear(self.n_d*self.bidir, self.n_d)
+            self.hidden = nn.Linear(num_wfsa_output, self.emb_size)
         elif args.num_mlp_layer == 1:
+            assert False, "we want to use 2-layer mlps"
             pass
         else:
             assert False
-        final_layer_d_out = args.d_out.split(";")[-1]
-        num_wfsa_output =  sum([int(one_size) for one_size in final_layer_d_out.split(",")])
-        self.output_layer = nn.Linear(num_wfsa_output, self.n_V)
 
         assert self.output_layer.weight.shape == self.emb_layer.embedding.weight.shape, "suspected this would be a problem."
         # tie weights
@@ -162,7 +167,7 @@ class Model(nn.Module):
 
 
     def init_weights(self):
-        val_range = (3.0/self.input_size)**0.5
+        val_range = (3.0/self.emb_size)**0.5
         for p in self.parameters():
             if p.dim() > 1:  # matrix
                 p.data.uniform_(-val_range, val_range)
@@ -172,6 +177,7 @@ class Model(nn.Module):
 
     def forward(self, x, init):
         emb = self.input_drop(self.emb_layer(x))
+        emb = self.drop(self.input_layer(emb).tanh())
         output, hidden, _ = self.encoder(emb, init)
 
         if self.num_mlp_layer == 2:
@@ -189,11 +195,12 @@ class Model(nn.Module):
     def init_hidden(self, batch_size):
         weight = next(self.parameters()).data
         if self.args.model == "lstm":
-            return (Variable(weight.new(self.depth, batch_size, self.input_size).zero_()),
-                    Variable(weight.new(self.depth, batch_size, self.input_size).zero_()))
+            return (Variable(weight.new(self.depth, batch_size, self.emb_size).zero_()),
+                    Variable(weight.new(self.depth, batch_size, self.emb_size).zero_()))
         elif self.args.model == "rrnn":
             init_input = self.init_input(batch_size)
             emb = self.input_drop(self.emb_layer(init_input))
+            emb = self.drop(self.input_layer(emb).tanh())
             output, hidden, _ = self.encoder(emb, None)
             return hidden
         else:
@@ -507,7 +514,11 @@ if __name__ == "__main__":
     argparser.add_argument("--seed", type=int, default=31415)
     argparser.add_argument("--model", type=str, default="rrnn")
     argparser.add_argument("--semiring", type=str, default="plus_times")
-    argparser.add_argument("--pattern", type=str, default="1-gram,2-gram,3-gram,4-gram")
+    argparser.add_argument("--depth", type=int, default=3)
+    argparser.add_argument("--pattern", type=str, default="1-gram,2-gram,3-gram,4-gram;1-gram,2-gram,3-gram,4-gram;1-gram,2-gram,3-gram,4-gram")
+    argparser.add_argument("--d_out", type=str, default="0,4,3,0;8,0,0,4;2,3,3,0")
+    argparser.add_argument("--emb_size", type=int, default=65)
+    argparser.add_argument("--num_mlp_layer", type=int, default=2)
     argparser.add_argument("--use_rho", type=str2bool, default=False)
     argparser.add_argument("--use_layer_norm", type=str2bool, default=False)
     argparser.add_argument("--use_output_gate", type=str2bool, default=True)
@@ -518,8 +529,6 @@ if __name__ == "__main__":
     argparser.add_argument("--batch_size", "--batch", type=int, default=32)
     argparser.add_argument("--unroll_size", type=int, default=35)
     argparser.add_argument("--max_epoch", type=int, default=300)
-    argparser.add_argument("--input_size", type=int, default=32)
-    argparser.add_argument("--d_out", type=str, default="8,8,8,8")
     argparser.add_argument("--input_dropout", type=float, default=0.0,
         help="dropout of word embeddings")
     argparser.add_argument("--output_dropout", type=float, default=0.0,
@@ -528,8 +537,6 @@ if __name__ == "__main__":
         help="dropout intra RNN layers")
     argparser.add_argument("--rnn_dropout", type=float, default=0.0,
         help="dropout of RNN layers")
-    argparser.add_argument("--depth", type=int, default=2)
-    argparser.add_argument("--num_mlp_layer", type=int, default=1)
     argparser.add_argument("--lr", type=float, default=1.0)
     argparser.add_argument("--lr_decay", type=float, default=0.98)
     argparser.add_argument("--lr_decay_epoch", type=int, default=0)
