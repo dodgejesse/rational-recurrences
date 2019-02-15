@@ -68,10 +68,10 @@ def predict_one_example(model, indices, cur_x, add_bias = True):
     # to see what the contribution of the existing wfsas is, and what the contribution is of the ones that were removed
 
     if add_bias:
-        model_b = model.out.bias
+        model_b = model.output_layer.bias
     else:
         model_b = 0
-    selected_weights = torch.index_select(model.out.weight, 1, indices)
+    selected_weights = torch.index_select(model.output_layer.weight, 1, indices)
     #selected_weights = torch.index_select(model_w, 1, indices)
     return selected_weights.matmul(selected_feats) + model_b
     
@@ -82,7 +82,7 @@ def compare_err(model, new_model, data_x, data_y):
     new_model_err = round(train_classifier.eval_model(None, new_model, data_x, data_y), 4)
     print("difference: {}, model err: {}, extracted structure model err: {}".format(
         round(new_model_err - model_err, 4), model_err, new_model_err))
-    
+
 # a method used to make sure the extracted structure behaves similarly to the learned model
 def predict_all_train(model, new_model, data_x):
     model.eval()
@@ -127,20 +127,26 @@ def extract_learned_structure(model, args, epoch = 0):
         num_of_each_ngram_per_layer.append(num_of_each_ngram)
 
     new_model, new_d_out = create_new_model(num_of_each_ngram_per_layer, args, model, layers)
-    update_new_model_weights(model, new_model, num_ngrams_per_layer, args)
+
+    # updating each layer's weights
+    for layer in range(layers):
+        all_wfsa_indices = update_new_model_weights(model, new_model, num_ngrams_per_layer[layer], args, layer)
+    # updating the Linear layer at the end
+    update_linear_output_layer(model, new_model, num_ngrams_per_layer[layer], torch.cat(all_wfsa_indices))
     
     return new_model, new_d_out
 
 # all weights are either "model" weights or "new_model" weights, as denoted in the name of the local variable
-def update_new_model_weights(model, new_model, num_ngrams, args):
+def update_new_model_weights(model, new_model, num_ngrams, args, layer):
     embed_dim = model.emb_layer.input_size
-    import pdb; pdb.set_trace()
+    
     print("need to extract the weights that are non-zero, and if any are non-zero for a particular wfsa, " +
           "should also extract the final column, which contains the output gate weights.")
-    num_edges_in_wfsa = model.encoder.rnn_lst[0].cells[0].ngram * 2
-    num_wfsas = sum([int(one_size) for one_size in args.d_out.split(";")[0].split(",")])
-
-    reshaped_model_weights = model.encoder.rnn_lst[0].cells[0].weight.view(embed_dim, num_wfsas, num_edges_in_wfsa)
+    num_edges_in_wfsa = model.encoder.rnn_lst[layer].cells[0].k
+    uses_output_gate = model.encoder.rnn_lst[layer].cells[0].ngram * 2 + 1 == model.encoder.rnn_lst[layer].cells[0].k
+    num_wfsas = sum([int(one_size) for one_size in args.d_out.split(";")[layer].split(",")])
+    
+    reshaped_model_weights = model.encoder.rnn_lst[layer].cells[0].weight.view(embed_dim, num_wfsas, num_edges_in_wfsa)
 
     cur_cell_num = 0
     all_wfsa_indices = []
@@ -154,27 +160,24 @@ def update_new_model_weights(model, new_model, num_ngrams, args):
             wfsa_indices = torch.autograd.Variable(torch.cuda.LongTensor(np.where(num_ngrams == i)[0]))
         else:
             wfsa_indices = torch.autograd.Variable(torch.LongTensor(np.where(num_ngrams == i)[0]))
-        
 
-        update_mult_weights(model, reshaped_model_weights, new_model, wfsa_indices, args, i, cur_cell_num)
-        update_bias_weights(num_edges_in_wfsa, num_wfsas, model, new_model, wfsa_indices, args, i, cur_cell_num)
+        update_mult_weights(model, reshaped_model_weights, new_model, wfsa_indices, args, i, cur_cell_num, layer)
+        update_bias_weights(num_edges_in_wfsa, num_wfsas, model, new_model, wfsa_indices, args, i, cur_cell_num, layer)
         all_wfsa_indices.append(wfsa_indices)
         cur_cell_num += 1
 
-
-    # DEBUG: have to fix the Linear layer at the end
-    update_linear_output_layer(model, new_model, num_ngrams, torch.cat(all_wfsa_indices))
-    # ignore the bias_final term, and check we don't use it. it's for language modeling.
     assert not model.encoder.bidirectional
     assert not args.use_rho
 
+    return all_wfsa_indices
+
 
 def update_linear_output_layer(model, new_model, num_ngrams, all_wfsa_indices):
-    model_weights = model.out.weight
-    model_bias = model.out.bias.data
+    model_weights = model.output_layer.weight
+    model_bias = model.output_layer.bias.data
 
-    new_model_weights = new_model.out.weight.data
-    new_model_bias = new_model.out.bias.data
+    new_model_weights = new_model.output_layer.weight.data
+    new_model_bias = new_model.output_layer.bias.data
 
     cur_model_weights = torch.index_select(model_weights, 1, all_wfsa_indices).data
 
@@ -193,18 +196,21 @@ def update_linear_output_layer(model, new_model, num_ngrams, all_wfsa_indices):
     
     
     
-def update_bias_weights(num_edges_in_wfsa, num_wfsas, model, new_model, wfsa_indices, args, i, cur_cell_num):
-    # do something with the bias term.
+def update_bias_weights(num_edges_in_wfsa, num_wfsas, model, new_model, wfsa_indices, args, i, cur_cell_num, layer):
     # it looks like we don't actually use the first half of the first dim of the bias anywhere.
-    # DEBUG fix these magic numbers
-    model_bias = model.encoder.rnn_lst[0].cells[0].bias.view(8, 1, 24)
-    cur_model_bias = torch.index_select(model_bias, 2, wfsa_indices)
+
+    uses_output_gate = model.encoder.rnn_lst[layer].cells[0].ngram * 2 + 1 == model.encoder.rnn_lst[layer].cells[0].k
+    model_bias = model.encoder.rnn_lst[layer].cells[0].bias.view(num_edges_in_wfsa, 1, num_wfsas)
+    cur_model_bias_full = torch.index_select(model_bias, 2, wfsa_indices)
     # to get the parts of the bias that are actually used
-    model_start_index = int(cur_model_bias.shape[0]/2)
+    model_start_index = int(cur_model_bias_full.shape[0]/2)
     # [model_start_index - (i+1) : model_start_index + (i+1)] is the middle set of params from this matrix
-    cur_model_bias = cur_model_bias[model_start_index - (i+1) : model_start_index + (i+1), ...]
+    cur_model_bias = cur_model_bias_full[model_start_index - (i+1) : model_start_index + (i+1), ...]
+
+    if uses_output_gate:
+        cur_model_bias = torch.cat((cur_model_bias, cur_model_bias_full[-1,...].unsqueeze(0)),0)
     
-    cur_new_model_bias = new_model.encoder.rnn_lst[0].cells[cur_cell_num].bias.view((i+1)*2, 1, wfsa_indices.shape[0])
+    cur_new_model_bias = new_model.encoder.rnn_lst[layer].cells[cur_cell_num].bias.view((i+1)*2 + uses_output_gate, 1, wfsa_indices.shape[0])
     
     cur_new_model_bias_data = cur_new_model_bias.data
     cur_model_bias_data = cur_model_bias.data
@@ -213,16 +219,17 @@ def update_bias_weights(num_edges_in_wfsa, num_wfsas, model, new_model, wfsa_ind
         
         
 # updates the multiplicative weights in new_model to be the same as in model, for the patterns of length i+1
-def update_mult_weights(model, reshaped_model_weights, new_model, wfsa_indices, args, i, cur_cell_num):
+def update_mult_weights(model, reshaped_model_weights, new_model, wfsa_indices, args, i, cur_cell_num, layer):
 
-    cur_model_weights = torch.index_select(reshaped_model_weights, 1, wfsa_indices)
+    uses_output_gate = model.encoder.rnn_lst[layer].cells[0].ngram * 2 + 1 == model.encoder.rnn_lst[layer].cells[0].k
+    cur_model_weights_full = torch.index_select(reshaped_model_weights, 1, wfsa_indices)
     # to get only the non-zero states
-    cur_model_weights = cur_model_weights[:,:,0:(i+1)*2]
+    cur_model_weights = cur_model_weights_full[:,:,0:(i+1)*2]
+    if uses_output_gate:
+        cur_model_weights = torch.cat((cur_model_weights, cur_model_weights_full[:,:,-1].unsqueeze(2)), 2)
     
-    cur_new_model_weights = new_model.encoder.rnn_lst[0].cells[cur_cell_num].weight
-    cur_new_model_weights = cur_new_model_weights.view(cur_model_weights.shape[0], cur_model_weights.shape[1], (i+1)*2)
-    #if args.gpu:
-    #    cur_new_model_weights = cur_new_model_weights.cuda()
+    cur_new_model_weights = new_model.encoder.rnn_lst[layer].cells[cur_cell_num].weight
+    cur_new_model_weights = cur_new_model_weights.view(cur_model_weights.shape[0], cur_model_weights.shape[1], (i+1)*2 + uses_output_gate)
         
     cur_new_model_weights_data = cur_new_model_weights.data
     cur_model_weights_data = cur_model_weights.data
@@ -254,17 +261,16 @@ def create_new_model(num_of_each_ngram, args, model, layers):
     # to remove the initial semicolon
     new_d_out = new_d_out[1:]
     new_pattern = new_pattern[1:]
-        
+    
     # setting the new d_out and pattern in args
     args.d_out = new_d_out
     args.pattern = new_pattern
 
-    #import pdb; pdb.set_trace()
     # creating the new model
     if args.language_modeling:
         new_model = train_lm.Model(model.emb_layer.word2id.keys(), args)
     else:
-        new_model = train_classifier.Model(args, model.emb_layer, model.out.out_features)
+        new_model = train_classifier.Model(args, model.emb_layer, model.output_layer.out_features)
     if args.gpu:
         new_model.cuda()
 

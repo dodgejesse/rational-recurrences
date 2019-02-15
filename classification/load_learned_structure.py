@@ -19,14 +19,14 @@ def main():
 # the next few functions are for l1-regularized models, below that are the entropy regularization models
 
 def l1_example():
-    file_base = "/home/jessedd/projects/rational-recurrences/classification/logging/amazon_categories/" + "books/"
+    file_base = "/home/jessedd/projects/rational-recurrences/classification/logging/amazon_categories/" + "original_mix/"
     file_base += "all_cs_and_equal_rho/hparam_opt/structure_search/add_reg_term_to_loss/"
-    filename_endings = ["*sparsity=states*goalparams=80*"]
+    filename_endings = ["*sparsity=states*1.953E-05_goalparams=80*"]
     for filename_ending in filename_endings:
         filenames = glob.glob(file_base + filename_ending)
 
         for filename in filenames:
-            from_file(filename=filename)
+            l1_group_norms(filename=filename)
 
 def l1_group_norms(args = None, filename = None, prox = False):
     norms, best_valid = get_norms(args, filename)
