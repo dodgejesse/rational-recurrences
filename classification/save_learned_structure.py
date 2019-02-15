@@ -2,7 +2,7 @@ import torch
 import train_classifier
 import numpy as np
 import os, sys
-sys.path.append("language_model/")
+sys.path.append("language_model")
 import train_lm
 
 

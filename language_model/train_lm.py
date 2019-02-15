@@ -1,4 +1,5 @@
 import argparse
+import os
 import time
 import math
 import sys
@@ -14,6 +15,10 @@ from semiring import *
 
 if "../classification/" not in sys.path:
     sys.path.append("../classification/")
+
+if "classification/" not in sys.path:
+    sys.path.append("classification/")
+
 import train_classifier
 
 
@@ -410,11 +415,28 @@ def eval_model(model, valid):
     ppl = np.exp(avg_loss)
     return ppl
 
+def update_environment_variables(args):
+    if 'PATTERN' in os.environ:
+        args.pattern = os.environ['PATTERN']
 
+    if 'D_OUT' in os.environ:
+        args.d_out = os.environ['D_OUT']
+
+    if 'SEED' in os.environ:
+        args.seed = int(os.environ['SEED'])
+
+    if 'LEARNED_STRUCTURE' in os.environ:
+        args.learned_structure = os.environ['LEARNED_STRUCTURE']
+
+    if 'SEMIRING' in os.environ:
+        args.semiring = os.environ['SEMIRING']
 
 
 def main(args):
     logging_file = train_classifier.init_logging(args)
+
+    update_environment_variables(args)
+
     torch.manual_seed(args.seed)
     train = read_corpus(args.train, shuffle=False)
     model = Model(train, args)
@@ -521,7 +543,9 @@ if __name__ == "__main__":
     argparser.add_argument("--loaded_data", type=bool, default=False)
     argparser.add_argument("--reg_strength_multiple_of_loss", type=bool, default=False)
     argparser.add_argument("--prox_step", type=bool, default=False)
-    
+    argparser.add_argument("--learned_structure", help="Learned structure",
+                           type=str, default="l1-states-learned")
+
     args = argparser.parse_args()
     args.language_modeling = True
     print(args)

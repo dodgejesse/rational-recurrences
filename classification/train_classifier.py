@@ -13,6 +13,8 @@ from termcolor import colored
 from tensorboardX import SummaryWriter
 if ".." not in sys.path:
     sys.path.append("..")
+if "." not in sys.path:
+    sys.path.append(".")
 import classification.dataloader as dataloader
 import classification.modules as modules
 from semiring import *
@@ -261,10 +263,10 @@ def init_logging(args):
         filename = args.filename() + ".txt"
 
     if not os.path.exists(dir_path):
-        os.mkdir(dir_path)
+        os.makedirs(dir_path, exist_ok=True)
 
     if not os.path.exists(dir_path + args.filename_prefix):
-        os.mkdir(dir_path + args.filename_prefix)
+        os.makedirs(dir_path + args.filename_prefix, exist_ok=True)
 
     torch.set_printoptions(threshold=500000)
         
