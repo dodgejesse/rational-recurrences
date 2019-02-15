@@ -340,7 +340,11 @@ def train_model(model, logging_file):
                 import save_learned_structure
                 new_model, new_d_out = save_learned_structure.extract_learned_structure(model, args, epoch)
                 if new_model is not None:
+                    new_model_valid_err = eval_model(new_model, dev)
+                    model_valid_err = eval_model(model, dev)
+                    print("{}, {}".format(new_model_valid_err, model_valid_err))
                     new_model_valid_err = eval_model(niter, new_model, valid_x, valid_y)
+                    
                 else:
                     new_model_valid_err = 0.0
 

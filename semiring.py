@@ -84,5 +84,6 @@ LogSemiring = \
         LogSum,
         torch.add,
         identity,
-        identity
+        identity,
+        torch.sigmoid
     )

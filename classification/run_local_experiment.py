@@ -6,12 +6,12 @@ from experiment_params import ExperimentParams
 import train_classifier
 import numpy as np
 import experiment_tools
-
+import torch
 
 def main(argv):
     loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_dir,argv.dataset))
     
-    if argv.random_selection:
+    if argv.random_selection or 'RANDOM_SELECTION' in os.environ:
         hyper_parameters_assignments = hparam_sample()
     else:
         hyper_parameters_assignments = {
@@ -23,21 +23,32 @@ def main(argv):
             "depth": argv.depth
         }
 
-    kwargs = {"pattern": argv.pattern, "d_out": argv.d_out,
-                            "learned_structure": argv.learned_structure,
+    def select_param_value(name, default_value):
+        return os.environ[name] if name in os.environ else default_value
+
+    parameters = {
+        'pattern': select_param_value('PATTERN', argv.pattern),
+        'd_out': select_param_value('D_OUT', argv.d_out),
+        'seed': int(select_param_value('SEED', argv.seed)),
+        'learned_structure': select_param_value('LEARNED_STRUCTURE', argv.learned_structure),
+        'semiring': select_param_value('SEMIRING', argv.semiring)
+    }
+
+    kwargs = {
+
                             "reg_goal_params": argv.reg_goal_params,
                             "filename_prefix": argv.filename_prefix,
-                            "seed": argv.seed, "loaded_embedding": loaded_embedding,
+                            "loaded_embedding": loaded_embedding,
                             "dataset": argv.dataset, "use_rho": False,
                             "gpu": argv.gpu,
                             "max_epoch": argv.max_epoch, "patience": argv.patience,
                             "batch_size": argv.batch_size, "use_last_cs": argv.use_last_cs,
                             "logging_dir": argv.logging_dir,
                             "base_data_dir": argv.base_dir, "output_dir": argv.model_save_dir,
-                            "reg_strength": argv.reg_strength, "sparsity_type": argv.sparsity_type,
-                            "semiring": argv.semiring}
+                            "reg_strength": argv.reg_strength, "sparsity_type": argv.sparsity_type
+                            }
 
-    args = ExperimentParams(**kwargs, **hyper_parameters_assignments)
+    args = ExperimentParams(**kwargs, **parameters, **hyper_parameters_assignments)
 
     _ = train_classifier.main(args)
 
@@ -79,8 +90,7 @@ def training_arg_parser():
     p.add_argument("--reg_strength", help="Regularization strength", type=float, default=0.0)
     p.add_argument("--semiring", help="Type of semiring (plus_times, max_times, max_plus)",
                    type=str, default="plus_times")
-    p.add_argument("--random_selection", help="Randomly select hyperparameters",
-                   action='store_true')
+    p.add_argument("--random_selection", help="Randomly select hyperparameters", action='store_true')
     # p.add_argument("-r", "--scheduler", help="Use reduce learning rate on plateau schedule", action='store_true')
     # p.add_argument("--debug", help="Debug", type=int, default=0)
     return p

@@ -82,7 +82,7 @@ class Model(nn.Module):
         else:
             assert False
         out_size = sum([int(one_size) for one_size in d_out.split(",")])
-        self.out = nn.Linear(out_size, nclasses)
+        self.output_layer = nn.Linear(out_size, nclasses)
 
 
     def init_hidden(self, batch_size):
@@ -113,7 +113,7 @@ class Model(nn.Module):
             feat = output[-1,:,0,:]
 
         feat = self.drop(feat)
-        return self.out(feat)
+        return self.output_layer(feat)
 
     # Assume rrnn model
     def visualize(self, input):
