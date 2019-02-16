@@ -444,6 +444,9 @@ def update_environment_variables(args):
     if 'SEMIRING' in os.environ:
         args.semiring = os.environ['SEMIRING']
 
+    if 'EMB_SIZE' in os.environ:
+        args.emb_size = int(os.environ['EMB_SIZE'])
+
 
 def main(args):
     logging_file = train_classifier.init_logging(args)
