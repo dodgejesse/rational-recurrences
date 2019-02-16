@@ -29,7 +29,7 @@ fi
 
 pattern="4-gram;4-gram"
 d_out="710;710"
-input_size=710
+emb_size=710
 input_dropout=0.65
 output_dropout=0.65
 
@@ -57,7 +57,7 @@ logging_dir=$2
 
 com="python3.6 train_lm.py --train $1/train --dev $1/dev --test $1/test \
 --d_out=$d_out \
---input_size=$input_size \
+--emb_size=$emb_size \
 --lr=$lr \
 --lr_decay=$lr_decay \
 --lr_decay_epoch=$lr_decay_epoch \

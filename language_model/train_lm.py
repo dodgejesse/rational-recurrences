@@ -281,12 +281,12 @@ def train_model(model, logging_file):
             output, hidden = model(x, hidden)
             hidden = repackage_hidden(args, hidden)
             assert x.size(1) == batch_size
-            loss = criterion(output, y) / x.size(1)
+            criterion_loss = criterion(output, y) / x.size(1)
 
             # to add the sparsifying regularizer
             
             if args.sparsity_type == "none":
-                reg_loss = loss
+                reg_loss = criterion_loss
                 regularization_term = 0
             else:
                 regularization_groups = train_classifier.get_regularization_groups(model, args)
@@ -294,12 +294,12 @@ def train_model(model, logging_file):
                 regularization_term = regularization_groups.sum()
                 
                 if args.reg_strength_multiple_of_loss and args.reg_strength == 0:
-                    args.reg_strength = loss.data[0]*args.reg_strength_multiple_of_loss/regularization_term.data[0]
+                    args.reg_strength = criterion_loss.data[0]*args.reg_strength_multiple_of_loss/regularization_term.data[0]
 
                 if args.prox_step:
-                    reg_loss = loss
+                    reg_loss = criterion_loss
                 else:
-                    reg_loss = loss + args.reg_strength * regularization_term
+                    reg_loss = criterion_loss + args.reg_strength * regularization_term
             loss = reg_loss
             
             loss.backward()
@@ -342,20 +342,22 @@ def train_model(model, logging_file):
                         test_ppl
                     ), logging_file)
                     sys.stdout.flush()
-            # DEBUG
-            if args.sparsity_type == "states" and False:
-                import save_learned_structure
-                new_model, new_d_out = save_learned_structure.extract_learned_structure(model, args, epoch)
-                if new_model is not None:
-                    new_model_valid_err = eval_model(new_model, dev)
-                    model_valid_err = eval_model(model, dev)
-                    print("{}, {}".format(new_model_valid_err, model_valid_err))
-                    new_model_valid_err = eval_model(niter, new_model, valid_x, valid_y)
-                    
-                else:
-                    new_model_valid_err = 0.0
+                # DEBUG
+                if args.sparsity_type == "states" and False:
 
-            
+                    import save_learned_structure
+                    new_model, new_d_out = save_learned_structure.extract_learned_structure(model, args, epoch)
+                    if new_d_out != '0,0,0,710;0,0,0,710':
+                        import pdb;pdb.set_trace()
+                    if new_model is not None:
+                        new_model_valid_err = eval_model(new_model, dev)
+                        model_valid_err = eval_model(model, dev)
+                        print("{}, {}".format(new_model_valid_err, model_valid_err))
+                        #new_model_valid_err = eval_model(niter, new_model, valid_x, valid_y)
+                    
+                    else:
+                        new_model_valid_err = 0.0
+
         # saving the group norms to the logging file. if args.sparsity_type isn't one of the regularized sparsities, it does notihng   
         regularization_groups = train_classifier.get_regularization_groups(model, args)
         train_classifier.log_groups(model, args, logging_file, regularization_groups)

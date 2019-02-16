@@ -107,6 +107,9 @@ def search_reg_str_l1(cur_assignments, kwargs):
     return counter, "okay_lr", cur_valid_err, learned_d_out
 
 def train_k_then_l_models(k,l,counter,total_evals,start_time, logging_dir, **kwargs):
+    if "seed" in kwargs:
+        np.random.seed(kwargs["seed"])
+        
     assert "reg_strength" in kwargs
     if "prox_step" not in kwargs:
         kwargs["prox_step"] = False

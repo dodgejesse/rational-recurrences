@@ -2,29 +2,40 @@ import torch
 import train_classifier
 import numpy as np
 import os, sys
-sys.path.append("language_model")
+sys.path.append("../language_model/")
 import train_lm
 
 
 THRESHOLD = 0.1
 ALLWFSA = None
 
-def to_file(model, filepath, args, data_x, data_y):
+def to_file(model, args, data_x, data_y, save_model, print_debug):
 
     new_model, new_d_out = extract_learned_structure(model, args)
-    check_new_model_predicts_same(model, new_model, data_x, data_y)
+    if print_debug:
+        check_new_model_predicts_same(model, new_model, data_x, data_y, new_d_out)
 
-    reduced_model_path = os.path.join(args.output_dir, "best_model_dout={}.pth".format(new_d_out))
-    print("Writing model to", reduced_model_path)
-    torch.save(new_model.state_dict(), reduced_model_path)
+    if save_model:
+        reduced_model_path = get_model_filepath(args, new_d_out)
+        print("Writing model to", reduced_model_path)
+        torch.save(new_model.state_dict(), reduced_model_path)
 
-    full_model_path = os.path.join(args.output_dir, "best_model.pth")
-    #print("Writing model to", reduced_model_path)
-    torch.save(model.state_dict(), full_model_path)
+    return new_model, new_d_out
 
+def remove_old(args, learned_d_out):
+    old_reduced_model_path = get_model_filepath(args, learned_d_out)
+    os.remove(old_reduced_model_path)
+
+def get_model_filepath(args, d_out):
+    if args.language_modeling:
+        reduced_model_path = args.logging_dir + args.args.filename
+    else:
+        reduced_model_path = args.logging_dir + args.dataset + args.filename()
+    reduced_model_path += "_model_learned={}.pth".format(d_out)
+    return reduced_model_path
 
 # a method used to make sure the extracted structure behaves similarly to the learned model
-def check_new_model_predicts_same(model, new_model, data_x, data_y):
+def check_new_model_predicts_same(model, new_model, data_x, data_y, new_d_out):
     # can manually look at feats vs new_model_feats, should be close (and identical for max-length WFSAs)
     #if check == "manually check features from wfsa":
     if True:
@@ -37,6 +48,7 @@ def check_new_model_predicts_same(model, new_model, data_x, data_y):
         # the features which didn't make it into the smaller model:
         model_indices_not_in_new = [int(x) for x in torch.arange(24) if not x in ALLWFSA.data]
         model_indices_not_in_new = torch.autograd.Variable(torch.cuda.LongTensor(model_indices_not_in_new))
+
         
         model_wfsadiscard_pred = predict_one_example(model, model_indices_not_in_new, cur_x, add_bias = False)
 
@@ -52,18 +64,20 @@ def check_new_model_predicts_same(model, new_model, data_x, data_y):
         # this shows that the 14th WFSA (seen in ALLWFSA) has the largest gap, of 0.2152, at epoch 37
         new_model_feat[0,:] - selected_feats
         
-
-        
         print(model_wfsakeep_pred, new_model_pred,model_wfsadiscard_pred)
     if True:
         predict_all_train(model, new_model, data_x)
     if True:
-        compare_err(model, new_model, data_x, data_y)
+        compare_err(model, new_model, data_x, data_y, new_d_out)
 
 def predict_one_example(model, indices, cur_x, add_bias = True):
+    if len(indices.shape) == 0:
+        return "all wfsas were included in learned structure (though some may have become shorte)"
 
     model_feat = encoder_fwd(model, cur_x)
     model_feat = model.drop(model_feat)
+
+    # i suspect this has problems when selected_feats is empty, because model_indices_not_in_new is empty
     selected_feats = torch.index_select(model_feat, 1, indices)[0,:]
     # to see what the contribution of the existing wfsas is, and what the contribution is of the ones that were removed
 
@@ -77,11 +91,11 @@ def predict_one_example(model, indices, cur_x, add_bias = True):
     
 
         
-def compare_err(model, new_model, data_x, data_y):
+def compare_err(model, new_model, data_x, data_y, new_d_out):
     model_err = round(train_classifier.eval_model(None, model, data_x, data_y), 4)
     new_model_err = round(train_classifier.eval_model(None, new_model, data_x, data_y), 4)
-    print("difference: {}, model err: {}, extracted structure model err: {}".format(
-        round(new_model_err - model_err, 4), model_err, new_model_err))
+    print("difference: {}, model err: {}, extracted structure model err: {}, extracted structure: {}".format(
+        round(new_model_err - model_err, 4), model_err, new_model_err, new_d_out))
 
 # a method used to make sure the extracted structure behaves similarly to the learned model
 def predict_all_train(model, new_model, data_x):
@@ -138,10 +152,10 @@ def extract_learned_structure(model, args, epoch = 0):
 
 # all weights are either "model" weights or "new_model" weights, as denoted in the name of the local variable
 def update_new_model_weights(model, new_model, num_ngrams, args, layer):
-    embed_dim = model.emb_layer.input_size
+    embed_dim = model.emb_layer.emb_size
     
-    print("need to extract the weights that are non-zero, and if any are non-zero for a particular wfsa, " +
-          "should also extract the final column, which contains the output gate weights.")
+    # need to extract the weights that are non-zero, and if any are non-zero for a particular wfsa,
+    # should also extract the final column, which contains the output gate weights.
     num_edges_in_wfsa = model.encoder.rnn_lst[layer].cells[0].k
     uses_output_gate = model.encoder.rnn_lst[layer].cells[0].ngram * 2 + 1 == model.encoder.rnn_lst[layer].cells[0].k
     num_wfsas = sum([int(one_size) for one_size in args.d_out.split(";")[layer].split(",")])

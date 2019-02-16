@@ -41,7 +41,7 @@ class Model(nn.Module):
 
         if args.model == "lstm":
             self.encoder = nn.LSTM(
-                emb_layer.input_size,
+                emb_layer.emb_size,
                 args.d_out,
                 args.depth,
                 dropout=args.dropout,
@@ -60,7 +60,7 @@ class Model(nn.Module):
                               "`max_plus`, `max_times`], not {}".format(args.semiring)
             self.encoder = rrnn.RRNN(
                 self.semiring,
-                emb_layer.input_size,
+                emb_layer.emb_size,
                 args.d_out,
                 args.depth,
                 pattern=args.pattern,
@@ -148,9 +148,7 @@ def eval_model(niter, model, valid_x, valid_y):
 
 
 def get_states_weights(model, args):
-
-
-    embed_dim = model.emb_layer.input_size
+    embed_dim = model.emb_layer.emb_size
     num_edges_in_wfsa = model.encoder.rnn_lst[0].cells[0].k
     ngram = model.encoder.rnn_lst[0].cells[0].ngram
     num_wfsas = sum([int(one_size) for one_size in args.d_out.split(";")[0].split(",")])
@@ -189,7 +187,7 @@ def get_states_weights(model, args):
 # this computes the group lasso penalty term
 def get_regularization_groups(model, args):
     if args.sparsity_type == "wfsa":
-        embed_dim = model.emb_layer.input_size
+        embed_dim = model.emb_layer.emb_size
         num_edges_in_wfsa = model.encoder.rnn_lst[0].k
         reshaped_weights = model.encoder.rnn_lst[0].weight.view(embed_dim, args.d_out, num_edges_in_wfsa)
         l2_norm = reshaped_weights.norm(2, dim=0).norm(2, dim=1)
@@ -235,14 +233,14 @@ def log_groups(model, args, logging_file, groups=None):
             logging_file.write(str(groups))
     else:
         if args.sparsity_type == "wfsa":
-            embed_dim = model.emb_layer.input_size
+            embed_dim = model.emb_layer.emb_size
             num_edges_in_wfsa = model.encoder.rnn_lst[0].k
             reshaped_weights = model.encoder.rnn_lst[0].weight.view(embed_dim, args.d_out, num_edges_in_wfsa)
             l2_norm = reshaped_weights.norm(2, dim=0).norm(2, dim=1)
             logging_file.write(str(l2_norm))
             
         elif args.sparsity_type == 'edges':
-            embed_dim = model.emb_layer.input_size
+            embed_dim = model.emb_layer.emb_size
             num_edges_in_wfsa = model.encoder.rnn_lst[0].k
             reshaped_weights = model.encoder.rnn_lst[0].weight.view(embed_dim, args.d_out, num_edges_in_wfsa)
             logging_file.write(str(reshaped_weights.norm(2, dim=0)))
@@ -305,7 +303,7 @@ def prox_step(model, args):
         states = get_states_weights(model, args)
         num_states = states.shape[2]
 
-        embed_dim = model.emb_layer.input_size
+        embed_dim = model.emb_layer.emb_size
         num_edges_in_wfsa = model.encoder.rnn_lst[0].cells[0].k
         num_wfsas = int(args.d_out)
     
@@ -392,43 +390,6 @@ def train_model(epoch, model, optimizer,
     log_groups(model, args, logging_file, regularization_groups)
 
     valid_err = eval_model(niter, model, valid_x, valid_y)
-    # DEBUG
-    if args.sparsity_type == "states":
-        import save_learned_structure
-        new_model, new_d_out = save_learned_structure.extract_learned_structure(model, args, epoch)
-        if new_model is not None:
-            new_model_valid_err = eval_model(niter, new_model, valid_x, valid_y)
-        else:
-            new_model_valid_err = 0.0
-
-    scheduler.step(valid_err)
-
-    epoch_string = "\n"
-    epoch_string += "-" * 110 + "\n"
-    if args.sparsity_type == "states":
-        epoch_string += "| Epoch={} | iter={} | lr={:.5f} | reg_strength={} | train_loss={:.6f} | valid_err={:.6f} | extracted_structure valid_err={:.6f} | regularized_loss={:.6f} |\n".format(
-        epoch, niter,
-        optimizer.param_groups[0]["lr"],
-        args.reg_strength,
-        loss.data[0],
-        valid_err,
-        new_model_valid_err,
-        reg_loss.data[0]
-        )
-    else:
-        epoch_string += "| Epoch={} | iter={} | lr={:.5f} | reg_strength={} | train_loss={:.6f} | valid_err={:.6f} | regularized_loss={:.6f} |\n".format(
-        epoch, niter,
-        optimizer.param_groups[0]["lr"],
-        args.reg_strength,
-        loss.data[0],
-        valid_err,
-        reg_loss.data[0]
-        )
-    epoch_string += "-" * 110 + "\n"
-
-    logging_file.write(epoch_string)
-    sys.stdout.write(epoch_string)
-    sys.stdout.flush()
     
     if valid_err < best_valid:
         unchanged = 0
@@ -438,6 +399,32 @@ def train_model(epoch, model, optimizer,
     if unchanged >= args.patience or regularization_stop(args, model):
         stop = True
         
+    scheduler.step(valid_err)
+
+    epoch_string = "\n"
+    epoch_string += "-" * 110 + "\n"
+    epoch_string += "| Epoch={} | iter={} | lr={:.5f} | reg_strength={} | train_loss={:.6f} | valid_err={:.6f} | regularized_loss={:.6f} |".format(
+        epoch, niter,
+        optimizer.param_groups[0]["lr"],
+        args.reg_strength,
+        loss.data[0],
+        valid_err,
+        reg_loss.data[0]
+        )
+
+    if args.sparsity_type == "states":
+        new_model_valid_err = 1.0
+        new_model, new_d_out = save_learned_structure.to_file(model, args, valid_x, valid_y, save_model = False, print_debug = True)
+        if new_model is not None:
+            new_model_valid_err = eval_model(niter, new_model, valid_x, valid_y)
+        epoch_string += " extracted_structure valid_err={:.6f} |".format(new_model_valid_err)
+
+    epoch_string += "\n"
+    epoch_string += "-" * 110 + "\n"
+
+    logging_file.write(epoch_string)
+    sys.stdout.write(epoch_string)
+    sys.stdout.flush()        
 
     sys.stdout.write("\n")
     sys.stdout.flush()
@@ -705,6 +692,9 @@ def main(args):
     best_valid = 1e+8
     unchanged = 0
 
+    if args.sparsity_type == "states":
+        learned_d_out = ""
+
     for epoch in range(args.max_epoch):
         np.random.shuffle(random_perm)
 
@@ -727,6 +717,17 @@ def main(args):
             unchanged, scheduler, logging_file
         )
 
+
+        # DEBUG
+        if args.sparsity_type == "states" and unchanged == 0:
+            if learned_d_out != "":
+                save_learned_structure.remove_old(args, learned_d_out)
+            _, learned_d_out = save_learned_structure.to_file(model, args, valid_x, valid_y, save_model = unchanged == 0,
+                                                                  print_debug = False)
+
+            #if new_model is not None:
+            #    new_model_valid_err = eval_model(niter, new_model, valid_x, valid_y)
+
         # DEBUG
         #debug_epoch = 35
         #if (unchanged == 0 and args.output_dir is not None) or epoch > debug_epoch:
@@ -739,10 +740,10 @@ def main(args):
         #        print("Writing model to", of)
         #        torch.save(model.state_dict(), of)
 
-        if unchanged == 0 and args.output_dir is not None:
-            of = os.path.join(args.output_dir, "best_model.pth")
-            print("Writing model to", of)
-            torch.save(model.state_dict(), of)
+        #if unchanged == 0 and args.output_dir is not None:
+        #    of = os.path.join(args.output_dir, "best_model.pth")
+        #    print("Writing model to", of)
+        #    torch.save(model.state_dict(), of)
 
         # if writer is not None:
         #     for name, param in model.named_parameters():
@@ -760,6 +761,7 @@ def main(args):
         # if writer is not None:
         #     writer.add_scalar("loss/best_valid", best_valid, epoch)
 
+        # DEBUG
 
         if stop:
             break

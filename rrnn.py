@@ -827,7 +827,7 @@ class RRNNLayer(nn.Module):
 class RRNN(nn.Module):
     def __init__(self,
                  semiring,
-                 input_size,
+                 emb_size,
                  d_out,
                  num_layers,
                  pattern="bigram",
@@ -847,7 +847,7 @@ class RRNN(nn.Module):
         super(RRNN, self).__init__()
         assert not bidirectional
         self.semiring = semiring
-        self.input_size = input_size
+        self.emb_size = emb_size
         self.d_out = [[int(one_size) for one_size in cur_d_out.split(",")] for cur_d_out in d_out.split(";")]
         self.num_layers = num_layers
         self.pattern = [[one_pattern for one_pattern in cur_pattern.split(",")] for cur_pattern in pattern.split(";")]
@@ -871,7 +871,7 @@ class RRNN(nn.Module):
         for i in range(num_layers):
             l = RRNNLayer(
                 semiring=semiring,
-                n_in=self.input_size if i == 0 else sum(self.d_out[i-1]),
+                n_in=self.emb_size if i == 0 else sum(self.d_out[i-1]),
                 n_out=self.d_out[i],
                 pattern=self.pattern[i],
                 dropout=dropout if i+1 != num_layers else 0.,
