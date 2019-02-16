@@ -431,6 +431,7 @@ def eval_model(model, valid):
 def update_environment_variables(args):
     if 'PATTERN' in os.environ:
         args.pattern = os.environ['PATTERN']
+       
 
     if 'D_OUT' in os.environ:
         args.d_out = os.environ['D_OUT']
@@ -450,8 +451,6 @@ def update_environment_variables(args):
 
 def main(args):
     logging_file = train_classifier.init_logging(args)
-
-    update_environment_variables(args)
 
     torch.manual_seed(args.seed)
     train = read_corpus(args.train, shuffle=False)
@@ -566,5 +565,7 @@ if __name__ == "__main__":
     args.language_modeling = True
     print(args)
     sys.stdout.flush()
+    update_environment_variables(args)
+
     generate_filename(args)
     main(args)
