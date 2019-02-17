@@ -565,9 +565,9 @@ if __name__ == "__main__":
 
     args = argparser.parse_args()
     args.language_modeling = True
-    print(args)
     sys.stdout.flush()
     update_environment_variables(args)
+    print(args)
 
     generate_filename(args)
     main(args)
