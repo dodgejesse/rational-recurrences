@@ -6,7 +6,6 @@ from experiment_params import ExperimentParams
 import train_classifier
 import numpy as np
 import experiment_tools
-import torch
 
 def main(argv):
     loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_dir,argv.dataset))
