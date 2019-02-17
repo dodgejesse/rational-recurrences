@@ -433,6 +433,7 @@ def eval_model(model, valid):
 def update_environment_variables(args):
     if 'PATTERN' in os.environ:
         args.pattern = os.environ['PATTERN']
+       
 
     if 'D_OUT' in os.environ:
         args.d_out = os.environ['D_OUT']
