@@ -646,16 +646,14 @@ class RRNNCell(nn.Module):
             u[..., i] = (u_[..., i] + forget_bias).sigmoid()   # forget 
 
         for i in range(0, self.ngram):
-            u[..., i] = self.semiring.activation(u_[..., i]) * (1. - u[..., i + self.ngram])  # input
+            u[..., i] = self.semiring.activation(self.semiring.conditional_times(u_[..., i], 1. - u[..., i + self.ngram]))  # input
 
         if self.use_output_gate:
             output_bias = bias[-1, ...]
             output = (u_[..., -1] + output_bias).sigmoid()
 
         if input.is_cuda:
-
             if self.ngram == 4:
-
                 from rrnn_gpu import RRNN_4gram_Compute_GPU
                 RRNN_Compute_GPU = RRNN_4gram_Compute_GPU(n_out, 8, self.semiring, self.bidirectional)
                 c1s, c2s, c3s, c4s, last_c1, last_c2, last_c3, last_c4 = RRNN_Compute_GPU(u, cs_init[0], cs_init[1], cs_init[2], cs_init[3])

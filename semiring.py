@@ -19,6 +19,7 @@ class Semiring:
                  one,
                  plus,
                  times,
+                 conditional_times,
                  from_float,
                  to_float,
                  activation):
@@ -27,6 +28,7 @@ class Semiring:
         self.one = one
         self.plus = plus
         self.times = times
+        self.conditional_times = conditional_times
         self.from_float = from_float
         self.to_float = to_float
         self.activation = activation
@@ -39,6 +41,7 @@ PlusTimesSemiring = \
         zero,
         one,
         torch.add,
+        torch.mul,
         torch.mul,
         identity,
         identity,
@@ -53,6 +56,7 @@ MaxPlusSemiring = \
         zero,
         torch.max,
         torch.add,
+        lambda x,y: x,
         identity,
         identity,
         torch.sigmoid
@@ -63,9 +67,10 @@ MaxTimesSemiring = \
     Semiring(
         2,
         neg_infinity,
-        zero,
+        one,
         torch.max,
         torch.mul,
+        lambda x,y: x,
         identity,
         identity,
         torch.sigmoid
@@ -83,6 +88,7 @@ LogSemiring = \
         # lambda x, y: torch.log(torch.exp(x) + torch.exp(y)),
         LogSum,
         torch.add,
+        lambda x,y: x,
         identity,
         identity,
         torch.sigmoid

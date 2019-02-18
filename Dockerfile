@@ -49,5 +49,7 @@ COPY language_model/train_lm.py language_model/train_lm.py
 COPY classification/save_learned_structure.py classification/save_learned_structure.py
 COPY classification/run_beaker_classification.sh classification/run_beaker_classification.sh
 COPY language_model/run_beaker_lm.sh language_model/run_beaker_lm.sh
+COPY rrnn.py rrnn.py
+COPY semiring.py semiring.py
 
 CMD ["python3.6", "-u", "classification/run_local_experiment.py"]
