@@ -49,6 +49,8 @@ def main(argv):
 
     args = ExperimentParams(**kwargs, **parameters, **hyper_parameters_assignments)
 
+    print(args)
+
     _ = train_classifier.main(args)
 
 
