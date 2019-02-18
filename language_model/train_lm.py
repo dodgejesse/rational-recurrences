@@ -434,7 +434,6 @@ def update_environment_variables(args):
     if 'PATTERN' in os.environ:
         args.pattern = os.environ['PATTERN']
        
-
     if 'D_OUT' in os.environ:
         args.d_out = os.environ['D_OUT']
 
@@ -449,6 +448,11 @@ def update_environment_variables(args):
 
     if 'EMB_SIZE' in os.environ:
         args.emb_size = int(os.environ['EMB_SIZE'])
+
+    if 'IN_OUT_DROPOUT' in os.environ:
+        in_out_dropout = int(os.environ['IN_OUT_DROPOUT'])
+        args.input_dropout = in_out_dropout
+        args.output_dropout = in_out_dropout
 
 
 def main(args):
