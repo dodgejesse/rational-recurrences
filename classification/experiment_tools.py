@@ -3,6 +3,9 @@ import time
 import os
 
 
+def select_param_value(name, default_value):
+    return os.environ[name] if name in os.environ else default_value
+
 
 def preload_embed(dir_location):
     start = time.time()

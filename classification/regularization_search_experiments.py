@@ -1,5 +1,4 @@
 import load_learned_structure
-from run_current_experiment import get_k_sorted_hparams
 from experiment_params import ExperimentParams
 import train_classifier
 import numpy as np
@@ -220,3 +219,53 @@ def train_k_then_l_models(k,l,counter,total_evals,start_time, logging_dir, **kwa
         
     
     return best, reg_search_counters
+
+
+def train_m_then_n_models(m,n,counter, total_evals,start_time,**kwargs):
+    best_assignment = None
+    best_valid_err = 1
+    all_assignments = get_k_sorted_hparams(m)
+    for i in range(m):
+        cur_assignments = all_assignments[i]
+        args = ExperimentParams(**kwargs, **cur_assignments)
+        cur_valid_err, _, _ = train_classifier.main(args)
+        if cur_valid_err < best_valid_err:
+            best_assignment = cur_assignments
+            best_valid_err = cur_valid_err
+        counter[0] = counter[0] + 1
+        print("trained {} out of {} hyperparameter assignments, so far {} seconds".format(
+            counter[0],total_evals, round(time.time()-start_time, 3)))
+
+    for i in range(n):
+        args = ExperimentParams(filename_suffix="_{}".format(i),**kwargs,**best_assignment)
+        cur_valid_err, _, _ = train_classifier.main(args)
+        counter[0] = counter[0] + 1
+        print("trained {} out of {} hyperparameter assignments, so far {} seconds".format(
+            counter[0],total_evals, round(time.time()-start_time, 3)))
+    return best_assignment
+
+
+# hparams to search over (from paper):
+# clip_grad, dropout, learning rate, rnn_dropout, embed_dropout, l2 regularization (actually weight decay)
+def hparam_sample(lr_bounds=[1.5, 10 ** -3]):
+    assignments = {
+        "clip_grad": np.random.uniform(1.0, 5.0),
+        "dropout": np.random.uniform(0.0, 0.5),
+        "rnn_dropout": np.random.uniform(0.0, 0.5),
+        "embed_dropout": np.random.uniform(0.0, 0.5),
+        "lr": np.exp(np.random.uniform(np.log(lr_bounds[0]), np.log(lr_bounds[1]))),
+        "weight_decay": np.exp(np.random.uniform(np.log(10 ** -5), np.log(10 ** -7))),
+    }
+
+    return assignments
+
+
+# orders them in increasing order of lr
+def get_k_sorted_hparams(k, lr_upper_bound=1.5, lr_lower_bound=5 * 10 ** -5):
+    all_assignments = []
+
+    for i in range(k):
+        cur = hparam_sample(lr_bounds=[lr_lower_bound, lr_upper_bound])
+        all_assignments.append([cur['lr'], cur])
+    all_assignments.sort()
+    return [assignment[1] for assignment in all_assignments]

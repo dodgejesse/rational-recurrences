@@ -4,14 +4,14 @@ import sys
 import os
 from experiment_params import ExperimentParams
 import train_classifier
-import numpy as np
 import experiment_tools
+import regularization_search_experiments
 
 def main(argv):
     loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_dir,argv.dataset))
     
     if argv.random_selection or 'RANDOM_SELECTION' in os.environ:
-        hyper_parameters_assignments = hparam_sample()
+        hyper_parameters_assignments = regularization_search_experiments.hparam_sample()
     else:
         hyper_parameters_assignments = {
             "clip_grad": argv.clip,
@@ -22,52 +22,32 @@ def main(argv):
             "depth": argv.depth
         }
 
-    def select_param_value(name, default_value):
-        return os.environ[name] if name in os.environ else default_value
-
     parameters = {
-        'pattern': select_param_value('PATTERN', argv.pattern),
-        'd_out': select_param_value('D_OUT', argv.d_out),
-        'seed': int(select_param_value('SEED', argv.seed)),
-        'learned_structure': select_param_value('LEARNED_STRUCTURE', argv.learned_structure),
-        'semiring': select_param_value('SEMIRING', argv.semiring)
+        'pattern': experiment_tools.select_param_value('PATTERN', argv.pattern),
+        'd_out': experiment_tools.select_param_value('D_OUT', argv.d_out),
+        'seed': int(experiment_tools.select_param_value('SEED', argv.seed)),
+        'learned_structure': experiment_tools.select_param_value('LEARNED_STRUCTURE', argv.learned_structure),
+        'semiring': experiment_tools.select_param_value('SEMIRING', argv.semiring)
     }
 
     kwargs = {
-
-                            "reg_goal_params": argv.reg_goal_params,
-                            "filename_prefix": argv.filename_prefix,
-                            "loaded_embedding": loaded_embedding,
-                            "dataset": argv.dataset, "use_rho": False,
-                            "gpu": argv.gpu,
-                            "max_epoch": argv.max_epoch, "patience": argv.patience,
-                            "batch_size": argv.batch_size, "use_last_cs": argv.use_last_cs,
-                            "logging_dir": argv.logging_dir,
-                            "base_data_dir": argv.base_dir, "output_dir": argv.model_save_dir,
-                            "reg_strength": argv.reg_strength, "sparsity_type": argv.sparsity_type
-                            }
+        "reg_goal_params": argv.reg_goal_params,
+        "filename_prefix": argv.filename_prefix,
+        "loaded_embedding": loaded_embedding,
+        "dataset": argv.dataset, "use_rho": False,
+        "gpu": argv.gpu,
+        "max_epoch": argv.max_epoch, "patience": argv.patience,
+        "batch_size": argv.batch_size, "use_last_cs": argv.use_last_cs,
+        "logging_dir": argv.logging_dir,
+        "base_data_dir": argv.base_dir, "output_dir": argv.model_save_dir,
+        "reg_strength": argv.reg_strength, "sparsity_type": argv.sparsity_type
+    }
 
     args = ExperimentParams(**kwargs, **parameters, **hyper_parameters_assignments)
 
     print(args)
 
     _ = train_classifier.main(args)
-
-
-
-# hparams to search over (from paper):
-# clip_grad, dropout, learning rate, rnn_dropout, embed_dropout, l2 regularization (actually weight decay)
-def hparam_sample(lr_bounds = [1.5, 10**-3]):
-    assignments = {
-        "clip_grad" : np.random.uniform(1.0, 5.0),
-        "dropout" : np.random.uniform(0.0, 0.5),
-        "rnn_dropout" : np.random.uniform(0.0, 0.5),
-        "embed_dropout" : np.random.uniform(0.0, 0.5),
-        "lr" : np.exp(np.random.uniform(np.log(lr_bounds[0]), np.log(lr_bounds[1]))),
-        "weight_decay" : np.exp(np.random.uniform(np.log(10**-5), np.log(10**-7))),
-    }
-
-    return assignments
 
 
 def training_arg_parser():
