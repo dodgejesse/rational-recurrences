@@ -10,21 +10,18 @@ import train_lm
 THRESHOLD = 0.1
 ALLWFSA = None
 
-def to_file(model, args, data_x, data_y, save_model, print_debug):
-
+def to_file(model, args, data_x, data_y, print_debug = True):
     new_model, new_d_out = extract_learned_structure(model, args)
     if print_debug:
         check_new_model_predicts_same(model, new_model, data_x, data_y, new_d_out)
 
-    if save_model:
-        reduced_model_path = get_model_filepath(args, new_d_out)
-        print("Writing model to", reduced_model_path)
-        torch.save(new_model.state_dict(), reduced_model_path)
+    reduced_model_path = get_model_filepath(args, new_d_out)
+    print("Writing model to", reduced_model_path)
+    torch.save(new_model.state_dict(), reduced_model_path)
 
-    return new_model, new_d_out
+    return new_d_out, reduced_model_path
 
-def remove_old(args, learned_d_out):
-    old_reduced_model_path = get_model_filepath(args, learned_d_out)
+def remove_old(old_reduced_model_path):
     os.remove(old_reduced_model_path)
 
 def get_model_filepath(args, d_out):

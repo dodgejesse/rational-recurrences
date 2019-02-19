@@ -48,7 +48,7 @@ def main():
                                 clip_grad = 2.82, dropout = 0.1809, rnn_dropout = 0.1537, embed_dropout = 0.3141,
                                 lr = 2.407E-02, weight_decay = 3.64E-07, depth = 1, output_dir = "/home/jessedd/projects/rational-recurrences/classification/logging/amazon_categories/original_mix/all_cs_and_equal_rho/saving_model_for_interpretability",
                                 reg_strength = 3.125E-04, sparsity_type = "states")
-        cur_valid_err = train_classifier.main(args)
+        cur_valid_err, _, _ = train_classifier.main(args)
 
     
     # a basic experiment
@@ -111,7 +111,7 @@ def main():
                     use_rho = False,
                     filename_prefix="all_cs_and_equal_rho/hparam_opt/structure_search/add_reg_term_to_loss/",
                     seed=None,
-                    loaded_embedding=loaded_embedding, reg_strength = 10**-6,
+                    loaded_embedding=loaded_embedding, reg_strength = 8*10**-6,
                     dataset = "amazon_categories/" + category)
                 
                 all_reg_search_counters.append(reg_search_counters)
@@ -188,7 +188,7 @@ def main():
                                 dataset = "amazon_categories/original_mix/", use_rho = False,
                                 clip_grad = 1.09, dropout = 0.1943, rnn_dropout = 0.0805, embed_dropout = 0.3489,
                                 lr = 2.553E-02, weight_decay = 1.64E-06, depth = 1, batch_size=5)
-        cur_valid_err, cur_test_err = train_classifier.main(args)
+        cur_valid_err, _, _ = train_classifier.main(args)
         
 
 
@@ -241,7 +241,7 @@ def train_m_then_n_models(m,n,counter, total_evals,start_time,**kwargs):
     for i in range(m):
         cur_assignments = all_assignments[i]
         args = ExperimentParams(**kwargs, **cur_assignments)
-        cur_valid_err = train_classifier.main(args)
+        cur_valid_err, _, _ = train_classifier.main(args)
         if cur_valid_err < best_valid_err:
             best_assignment = cur_assignments
             best_valid_err = cur_valid_err
@@ -251,7 +251,7 @@ def train_m_then_n_models(m,n,counter, total_evals,start_time,**kwargs):
 
     for i in range(n):
         args = ExperimentParams(filename_suffix="_{}".format(i),**kwargs,**best_assignment)
-        cur_valid_err = train_classifier.main(args)
+        cur_valid_err, _, _ = train_classifier.main(args)
         counter[0] = counter[0] + 1
         print("trained {} out of {} hyperparameter assignments, so far {} seconds".format(
             counter[0],total_evals, round(time.time()-start_time, 3)))

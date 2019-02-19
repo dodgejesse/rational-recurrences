@@ -414,9 +414,13 @@ def train_model(epoch, model, optimizer,
 
     if args.sparsity_type == "states":
         new_model_valid_err = 1.0
-        new_model, new_d_out = save_learned_structure.to_file(model, args, valid_x, valid_y, save_model = False, print_debug = True)
-        if new_model is not None:
-            new_model_valid_err = eval_model(niter, new_model, valid_x, valid_y)
+        new_model, new_d_out = save_learned_structure.extract_learned_structure(model, args)
+        if new_d_out.split(",")[-1] != args.d_out:
+            save_learned_structure.check_new_model_predicts_same(model, new_model, valid_x, valid_y, new_d_out)
+            if new_model is not None:
+                new_model_valid_err = eval_model(niter, new_model, valid_x, valid_y)
+        else:
+            new_model_valid_err = valid_err
         epoch_string += " extracted_structure valid_err={:.6f} |".format(new_model_valid_err)
 
     epoch_string += "\n"
@@ -648,6 +652,15 @@ def main_init(args):
 
     model = Model(args, emb_layer, nclasses)
 
+    # if we're fine tuning a learned model
+    if args.fine_tune:
+        if args.gpu:
+            state_dict = torch.load(args.reduced_model_path)
+        else:
+            state_dict = torch.load(args.reduced_model_path, map_location=lambda storage, loc: storage)
+        model.load_state_dict(state_dict)
+    
+
     return model, [train_X, valid_X, test_X], [train_Y, valid_Y, test_Y], emb_layer
 
 
@@ -691,9 +704,8 @@ def main(args):
 
     best_valid = 1e+8
     unchanged = 0
-
-    if args.sparsity_type == "states":
-        learned_d_out = ""
+    reduced_model_path = ""
+    learned_d_out = ""
 
     for epoch in range(args.max_epoch):
         np.random.shuffle(random_perm)
@@ -718,50 +730,16 @@ def main(args):
         )
 
 
-        # DEBUG
-        if args.sparsity_type == "states" and unchanged == 0:
-            if learned_d_out != "":
-                save_learned_structure.remove_old(args, learned_d_out)
-            _, learned_d_out = save_learned_structure.to_file(model, args, valid_x, valid_y, save_model = unchanged == 0,
-                                                                  print_debug = False)
-
-            #if new_model is not None:
-            #    new_model_valid_err = eval_model(niter, new_model, valid_x, valid_y)
-
-        # DEBUG
-        #debug_epoch = 35
-        #if (unchanged == 0 and args.output_dir is not None) or epoch > debug_epoch:
-        #    if epoch > debug_epoch:
-        #        import pdb; pdb.set_trace()
-        #    of = os.path.join(args.output_dir, "best_model.pth")
-        #    if True:
-        #        save_learned_structure.to_file(model, of, args, valid_x, valid_y)
-        #    else:
-        #        print("Writing model to", of)
-        #        torch.save(model.state_dict(), of)
-
-        #if unchanged == 0 and args.output_dir is not None:
-        #    of = os.path.join(args.output_dir, "best_model.pth")
-        #    print("Writing model to", of)
-        #    torch.save(model.state_dict(), of)
-
-        # if writer is not None:
-        #     for name, param in model.named_parameters():
-        #         writer.add_scalar("parameter_mean/" + name,
-        #                           param.data.mean(),
-        #                           epoch)
-        #         writer.add_scalar("parameter_std/" + name, param.data.std(), epoch)
-        #         if param.grad is not None:
-        #             writer.add_scalar("gradient_mean/" + name,
-        #                               param.grad.data.mean(),
-        #                               epoch)
-        #             writer.add_scalar("gradient_std/" + name,
-        #                               param.grad.data.std(),
-        #                               epoch)
-        # if writer is not None:
-        #     writer.add_scalar("loss/best_valid", best_valid, epoch)
-
-        # DEBUG
+        # to save the learned structure, and remove old saved structure, if the dev err is lower than prev best.
+        if unchanged == 0:
+            if reduced_model_path != "":
+                save_learned_structure.remove_old(reduced_model_path)
+            if args.sparsity_type == "states":
+                learned_d_out, reduced_model_path = save_learned_structure.to_file(model, args, valid_x, valid_y,
+                                                                                   print_debug = False)
+            else:
+                reduced_model_path = save_learned_structure.get_model_filepath(args, args.d_out)
+                torch.save(model.state_dict(), reduced_model_path)
 
         if stop:
             break
@@ -772,12 +750,12 @@ def main(args):
 
 
     sys.stdout.write("best_valid: {:.6f}\n".format(best_valid))
-#    sys.stdout.write("test_err: {:.6f}\n".format(test_err))
     sys.stdout.flush()
     logging_file.write("best_valid: {:.6f}\n".format(best_valid))
-#    logging_file.write("test_err: {:.6f}\n".format(test_err))
     logging_file.close()
-    return best_valid#, test_err
+    return best_valid, learned_d_out, reduced_model_path
+
+
 
 
 
