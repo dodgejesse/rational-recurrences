@@ -29,7 +29,7 @@ def main(argv):
         "max_epoch": argv.max_epoch, "patience": argv.patience,
         "batch_size": argv.batch_size, "use_last_cs": argv.use_last_cs,
         "logging_dir": argv.logging_dir,
-        "reg_strength": argv.reg_strength, "sparsity_type": argv.sparsity_type,
+        "reg_strength": argv.reg_strength,
         "base_data_dir": argv.base_dir, "output_dir": argv.model_save_dir
     }
 
@@ -38,6 +38,7 @@ def main(argv):
         "l": argv.l,
         "m": argv.m,
         "n": argv.n,
+        "sparsity_type": argv.sparsity_type,
         "reg_goal_params_list": [int(x) for x in argv.reg_goal_params.split(",")]
     }
 
@@ -66,14 +67,15 @@ def run_grid_search(training_args, rand_search_args):
             k=rand_search_args["k"], l=rand_search_args["l"],
             counter=counter, total_evals=total_evals, start_time=start_time,
             reg_goal_params=reg_goal_params,
+            sparsity_type=rand_search_args["sparsity_type"],
             **training_args)
 
         all_reg_search_counters.append(reg_search_counters)
-        training_args_copy = copy.deepcopy(rand_search_args)
+        training_args_copy = copy.deepcopy(training_args)
 
         training_args_copy["pattern"]=best['learned_pattern']
         training_args_copy["d_out"] = best['learned_d_out']
-        training_args_copy["learned_structure"] = best['l1-states-learned']
+        training_args_copy["learned_structure"] = 'l1-states-learned'
 
         args = regularization_search_experiments.train_m_then_n_models(
             m=rand_search_args["m"], n=rand_search_args["n"], counter=counter,
