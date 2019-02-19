@@ -34,13 +34,15 @@ def main(argv):
         "base_data_dir": argv.base_data_dir
     }
 
+    reg_goal_params = experiment_tools.select_param_value('REG_GOAL_PARAMS', argv.reg_goal_params)
+
     rand_search_args = {
         "k": argv.k,
         "l": argv.l,
         "m": argv.m,
         "n": argv.n,
         "sparsity_type": argv.sparsity_type,
-        "reg_goal_params_list": [int(x) for x in argv.reg_goal_params.split(",")]
+        "reg_goal_params_list": [int(x) for x in reg_goal_params.split(",")]
     }
 
     print(training_args)
