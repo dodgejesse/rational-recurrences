@@ -48,6 +48,7 @@ COPY classification/run_local_experiment.py classification/run_local_experiment.
 COPY language_model/train_lm.py language_model/train_lm.py
 COPY classification/save_learned_structure.py classification/save_learned_structure.py
 COPY classification/run_beaker_classification.sh classification/run_beaker_classification.sh
+COPY classification/run_beaker_structure_learning_classification.sh run_beaker_structure_learning_classification.sh
 COPY language_model/run_beaker_lm.sh language_model/run_beaker_lm.sh
 COPY rrnn.py rrnn.py
 COPY semiring.py semiring.py
