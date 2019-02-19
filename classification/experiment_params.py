@@ -20,6 +20,7 @@ class ExperimentParams:
                  embedding = None,
                  loaded_embedding = None,
                  seed = 314159,
+                 counter = None,
                  model = "rrnn",
                  semiring = "plus_times",
                  use_layer_norm = False,
@@ -73,6 +74,7 @@ class ExperimentParams:
         self.embedding = embedding
         self.loaded_embedding = loaded_embedding
         self.seed = seed
+        self.counter = counter
         self.model = model
         self.semiring = semiring
         self.use_layer_norm = use_layer_norm
@@ -142,8 +144,20 @@ class ExperimentParams:
             sparsity_name = self.sparsity_type
         if self.debug_run:
             self.filename_prefix += "DEBUG_"
-        name = "{}{}_layers={}_lr={:.3E}_dout={}_drout={:.4f}_rnndout={:.4f}_embdout={:.4f}_wdecay={:.2E}_clip={:.2f}_pattern={}_sparsity={}".format(
-            self.filename_prefix, self.trainer, self.depth, self.lr, self.d_out, self.dropout, self.rnn_dropout, self.embed_dropout,
+
+        name = self.filename_prefix
+
+        if self.counter is not None:
+            if self.counter < 10:
+                counter_string = "00{}".format(self.counter)
+            elif self.counter < 100:
+                counter_string = "0{}".format(self.counter)
+            else:
+                counter_string = str(self.counter)
+            name += "expnum={}_".format(counter_string)
+
+        name += "{}_layers={}_lr={:.3E}_dout={}_drout={:.4f}_rnndout={:.4f}_embdout={:.4f}_wdecay={:.2E}_clip={:.2f}_pattern={}_sparsity={}".format(
+            self.trainer, self.depth, self.lr, self.d_out, self.dropout, self.rnn_dropout, self.embed_dropout,
             self.weight_decay, self.clip_grad, self.pattern, sparsity_name)
         if self.reg_strength > 0:
             name += "_regstr={:.3E}".format(self.reg_strength)

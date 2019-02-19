@@ -4,6 +4,8 @@ import train_classifier
 import numpy as np
 import time, os
 
+LR_LOWER_BOUND = 7*10**-3
+LR_UPPER_BOUND = .5
 
 def search_reg_str_entropy(cur_assignments, kwargs):
     starting_reg_str = kwargs["reg_strength"]
@@ -57,7 +59,7 @@ def search_reg_str_entropy(cur_assignments, kwargs):
 # too small learning rate
 # too large learning rate
 # too large step size for reg strength, so it's too big then too small
-def search_reg_str_l1(cur_assignments, kwargs):
+def search_reg_str_l1(cur_assignments, kwargs, global_counter):
     # the final number of params is within this amount of target
     smallest_reg_str = 10**-9
     largest_reg_str = 10**2
@@ -75,7 +77,7 @@ def search_reg_str_l1(cur_assignments, kwargs):
         if reduced_model_path != "":
             os.remove(reduced_model_path)
         counter += 1
-        args = ExperimentParams(**kwargs, **cur_assignments)
+        args = ExperimentParams(counter = global_counter, **kwargs, **cur_assignments)
         cur_valid_err, learned_d_out, reduced_model_path = train_classifier.main(args)
         
         num_params = sum([int(learned_d_out.split(",")[i]) * (i+1) for i in range(len(learned_d_out.split(",")))])
@@ -102,7 +104,7 @@ def search_reg_str_l1(cur_assignments, kwargs):
                 kwargs["reg_strength"] = starting_reg_str
                 
                 # it diverged, and for some reason the weights didn't drop
-                if num_params == int(args.d_out) * 4 and cur_assignments["lr"] > .25 and cur_valid_err > .3:
+                if num_params == int(args.d_out) * 4 and cur_assignments["lr"] > .1 and cur_valid_err > .3:
                     return counter, "too_big_lr", cur_valid_err, learned_d_out, reduced_model_path
                 else:
                     return counter, "too_small_lr", cur_valid_err, learned_d_out, reduced_model_path
@@ -123,7 +125,7 @@ def get_kwargs_for_fine_tuning(kwargs, reduced_model_path, learned_d_out, patter
     return new_kwargs
     
 def train_k_then_l_models(k,l,counter,total_evals,start_time, logging_dir, **kwargs):
-    if "seed" in kwargs:
+    if "seed" in kwargs and kwargs["seed"] is not None:
         np.random.seed(kwargs["seed"])
         
     assert "reg_strength" in kwargs
@@ -145,8 +147,8 @@ def train_k_then_l_models(k,l,counter,total_evals,start_time, logging_dir, **kwa
         }
 
     reg_search_counters = []
-    lr_lower_bound = 7*10**-3
-    lr_upper_bound = .5
+    lr_lower_bound = LR_LOWER_BOUND
+    lr_upper_bound = LR_UPPER_BOUND
     all_assignments = get_k_sorted_hparams(k, lr_lower_bound, lr_upper_bound)
     for i in range(len(all_assignments)):
 
@@ -161,7 +163,7 @@ def train_k_then_l_models(k,l,counter,total_evals,start_time, logging_dir, **kwa
                 one_search_counter, lr_judgement = search_reg_str_entropy(cur_assignments, kwargs)
             elif kwargs["sparsity_type"] == "states":
                 one_search_counter, lr_judgement, cur_valid_err, learned_d_out, reduced_model_path = search_reg_str_l1(
-                    cur_assignments, kwargs)
+                    cur_assignments, kwargs, counter[0])
                 learned_pattern = "1-gram,2-gram,3-gram,4-gram"
 
             del kwargs["lr_patience"]
@@ -185,17 +187,10 @@ def train_k_then_l_models(k,l,counter,total_evals,start_time, logging_dir, **kwa
                     new_assignments.reverse()
                 all_assignments[i:len(all_assignments)] = new_assignments
                 
-        if kwargs["sparsity_type"] == "rho_entropy":
-
-            args = ExperimentParams(**kwargs, **cur_assignments)
-            cur_valid_err = train_classifier.main(args)
-        
-            learned_pattern, learned_d_out, frac_under_pointnine = load_learned_structure.l1_group_norms(
-                file_base + args.filename() + ".txt", .9)
 
         # to fine tune the learned model
         kwargs_fine_tune = get_kwargs_for_fine_tuning(kwargs, reduced_model_path, learned_d_out, learned_pattern)
-        args = ExperimentParams(**kwargs_fine_tune, **cur_assignments)
+        args = ExperimentParams(counter = counter[0], **kwargs_fine_tune, **cur_assignments)
         cur_valid_err, _, _ = train_classifier.main(args)
             
         if cur_valid_err < best["valid_err"]:
@@ -213,8 +208,14 @@ def train_k_then_l_models(k,l,counter,total_evals,start_time, logging_dir, **kwa
 
     kwargs["reg_strength"] = best["reg_strength"]
     for i in range(l):
-        args = ExperimentParams(filename_suffix="_{}".format(i),**kwargs, **best["assignment"])
-        cur_valid_err, _, _ = train_classifier.main(args)
+        args = ExperimentParams(counter = counter[0], filename_suffix="_{}".format(i),**kwargs, **best["assignment"])
+        cur_valid_err, learned_d_out, reduced_model_path = train_classifier.main(args)
+
+        # to fine tune the model trained on the above line
+        kwargs_fine_tune = get_kwargs_for_fine_tuning(kwargs, reduced_model_path, learned_d_out, learned_pattern)
+        args = ExperimentParams(counter = counter[0], filename_suffix="_{}".format(i), **kwargs_fine_tune, **best["assignment"])
+        cur_valid_err, learned_d_out, reduced_model_path = train_classifier.main(args)
+        
         counter[0] = counter[0] + 1
         
     
@@ -227,7 +228,7 @@ def train_m_then_n_models(m,n,counter, total_evals,start_time,**kwargs):
     all_assignments = get_k_sorted_hparams(m)
     for i in range(m):
         cur_assignments = all_assignments[i]
-        args = ExperimentParams(**kwargs, **cur_assignments)
+        args = ExperimentParams(counter = counter[0], **kwargs, **cur_assignments)
         cur_valid_err, _, _ = train_classifier.main(args)
         if cur_valid_err < best_valid_err:
             best_assignment = cur_assignments
@@ -237,7 +238,7 @@ def train_m_then_n_models(m,n,counter, total_evals,start_time,**kwargs):
             counter[0],total_evals, round(time.time()-start_time, 3)))
 
     for i in range(n):
-        args = ExperimentParams(filename_suffix="_{}".format(i),**kwargs,**best_assignment)
+        args = ExperimentParams(counter = counter[0], filename_suffix="_{}".format(i),**kwargs,**best_assignment)
         cur_valid_err, _, _ = train_classifier.main(args)
         counter[0] = counter[0] + 1
         print("trained {} out of {} hyperparameter assignments, so far {} seconds".format(
@@ -247,7 +248,7 @@ def train_m_then_n_models(m,n,counter, total_evals,start_time,**kwargs):
 
 # hparams to search over (from paper):
 # clip_grad, dropout, learning rate, rnn_dropout, embed_dropout, l2 regularization (actually weight decay)
-def hparam_sample(lr_bounds=[1.5, 10 ** -3]):
+def hparam_sample(lr_bounds=[LR_LOWER_BOUND, LR_UPPER_BOUND]):
     assignments = {
         "clip_grad": np.random.uniform(1.0, 5.0),
         "dropout": np.random.uniform(0.0, 0.5),
@@ -261,7 +262,7 @@ def hparam_sample(lr_bounds=[1.5, 10 ** -3]):
 
 
 # orders them in increasing order of lr
-def get_k_sorted_hparams(k, lr_upper_bound=1.5, lr_lower_bound=5 * 10 ** -5):
+def get_k_sorted_hparams(k, lr_upper_bound=LR_UPPER_BOUND, lr_lower_bound=LR_LOWER_BOUND):
     all_assignments = []
 
     for i in range(k):

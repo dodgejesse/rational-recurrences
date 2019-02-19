@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 import sys
@@ -9,18 +8,20 @@ import copy
 import time
 import experiment_tools
 import regularization_search_experiments
-from experiment_params import ExperimentParams, get_categories
+from experiment_params import ExperimentParams
 
 
 
 def main(argv):
-    loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_dir, argv.dataset))
+    loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_data_dir, argv.dataset))
 
+    seed = experiment_tools.select_param_value('SEED', argv.seed)
+    if seed is not None:
+        seed = int(seed)
     training_args = {
         'pattern': experiment_tools.select_param_value('PATTERN', argv.pattern),
         'd_out': experiment_tools.select_param_value('D_OUT', argv.d_out),
-        'seed': int(experiment_tools.select_param_value('SEED', argv.seed)),
-        'learned_structure': experiment_tools.select_param_value('LEARNED_STRUCTURE', argv.learned_structure),
+        'seed': seed,
         'semiring': experiment_tools.select_param_value('SEMIRING', argv.semiring),
         "depth": argv.depth,
         "filename_prefix": argv.filename_prefix,
@@ -30,7 +31,7 @@ def main(argv):
         "batch_size": argv.batch_size, "use_last_cs": argv.use_last_cs,
         "logging_dir": argv.logging_dir,
         "reg_strength": argv.reg_strength,
-        "base_data_dir": argv.base_dir, "output_dir": argv.model_save_dir
+        "base_data_dir": argv.base_data_dir
     }
 
     rand_search_args = {
@@ -53,10 +54,8 @@ def main(argv):
 def run_grid_search(training_args, rand_search_args):
     start_time = time.time()
     counter = [0]
-    categories = get_categories()
 
-    total_evals = len(categories) * \
-                  (rand_search_args["m"] + rand_search_args["n"] + \
+    total_evals = (rand_search_args["m"] + rand_search_args["n"] + \
                    rand_search_args["k"] + rand_search_args["l"]) * \
                   len(rand_search_args["reg_goal_params_list"])
 
@@ -71,33 +70,41 @@ def run_grid_search(training_args, rand_search_args):
             **training_args)
 
         all_reg_search_counters.append(reg_search_counters)
-        training_args_copy = copy.deepcopy(training_args)
-
-        training_args_copy["pattern"]=best['learned_pattern']
-        training_args_copy["d_out"] = best['learned_d_out']
-        training_args_copy["learned_structure"] = 'l1-states-learned'
-
+        
+        training_args_copy = get_unregularized_args(training_args, best)
+        
         args = regularization_search_experiments.train_m_then_n_models(
             m=rand_search_args["m"], n=rand_search_args["n"], counter=counter,
-            total_evals=total_evals, start_time=total_evals,
+            total_evals=total_evals, start_time=start_time,
             **training_args_copy)
 
     print("search counters:")
     for search_counter in all_reg_search_counters:
         print(search_counter)
 
+# to get the args for an unregularized experiment
+def get_unregularized_args(training_args, best):
+    loaded_emb = training_args["loaded_embedding"]
+    training_args["loaded_embedding"] = None
+    training_args_copy = copy.deepcopy(training_args)
+    training_args["loaded_embedding"] = loaded_emb
+    training_args_copy["loaded_embedding"] = loaded_emb
 
+    training_args_copy["pattern"] = best['learned_pattern']
+    training_args_copy["d_out"] = best['learned_d_out']
+    training_args_copy["learned_structure"] = 'l1-states-learned'
+    del training_args_copy["reg_strength"]
+
+    return training_args_copy
 
 def training_arg_parser():
     """ CLI args related to training models. """
     p = ArgumentParser(add_help=False)
-    p.add_argument("--learned_structure", help="Learned structure", type=str, default="l1-states-learned")
     p.add_argument('--reg_goal_params', type=str, default="80,60,40,20")
-    p.add_argument('--filename_prefix', help='logging file prefix?', type=str,
+    p.add_argument('--filename_prefix', help='logging file prefix', type=str,
                    default="all_cs_and_equal_rho/saving_model_for_interpretability/")
-    p.add_argument("-m", "--model_save_dir", help="where to save the trained model", type=str)
     p.add_argument("--logging_dir", help="Logging directory", type=str, required=True)
-    p.add_argument("--max_epoch", help="Number of iterations", type=int, default=500)
+    p.add_argument("--max_epoch", help="Max number of epochs", type=int, default=500)
     p.add_argument("--patience", help="Patience parameter (for early stopping)", type=int, default=30)
     p.add_argument("--sparsity_type", help="Type of sparsity (wfsa, edges, states, rho_entropy or none)",
                    type=str, default="states")

@@ -252,14 +252,13 @@ def log_groups(model, args, logging_file, groups=None):
     
 
 def init_logging(args):
-
     if args.language_modeling:
         dir_path = args.logging_dir
         filename = args.filename
     else:
         dir_path = args.logging_dir + args.dataset + "/"
         filename = args.filename() + ".txt"
-
+    
     if not os.path.exists(dir_path):
         os.makedirs(dir_path, exist_ok=True)
 
@@ -283,7 +282,7 @@ def init_logging(args):
     if args.loaded_data:
         args.loaded_data = tmp_data
     
-    print("saving in {}".format(filename))
+    print("saving in {}".format(dir_path + filename))
     return logging_file
 
 
