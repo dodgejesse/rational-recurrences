@@ -112,6 +112,9 @@ def search_reg_str_l1(cur_assignments, kwargs, global_counter):
                     return counter, "too_big_lr", cur_valid_err, learned_d_out, reduced_model_path
                 else:
                     return counter, "too_small_lr", cur_valid_err, learned_d_out, reduced_model_path
+        if counter > 15:
+            kwargs["reg_strength"] = starting_reg_str
+            return counter, "bad_hparams", cur_valid_err, learned_d_out, reduced_model_path
         else:
             found_good_reg_str = True
     return counter, "okay_lr", cur_valid_err, learned_d_out, reduced_model_path
@@ -180,20 +183,23 @@ def train_k_then_l_models(k,l,counter,total_evals,start_time, logging_dir, **kwa
             if lr_judgement == "okay_lr":
                 valid_assignment = True
             else:
-                if lr_judgement == "too_big_lr":
-                    # lower the upper bound
-                    lr_upper_bound = cur_assignments['lr']
-                    reverse = True
-                elif lr_judgement == "too_small_lr":
-                    # rase lower bound
-                    lr_lower_bound = cur_assignments['lr']
-                    reverse = False
-                else:
-                    assert False, "shouldn't be here."
-                new_assignments = get_k_sorted_hparams(k-i, lr_lower_bound, lr_upper_bound)
-                if reverse:
-                    new_assignments.reverse()
+                new_assignments = get_k_sorted_hparams(k-i, lr_lower_bound, lr_upper_bound, sort=False)
                 all_assignments[i:len(all_assignments)] = new_assignments
+
+                #if lr_judgement == "too_big_lr":
+                #    # lower the upper bound
+                #    lr_upper_bound = cur_assignments['lr']
+                #    reverse = True
+                #elif lr_judgement == "too_small_lr":
+                #    # rase lower bound
+                #    lr_lower_bound = cur_assignments['lr']
+                #    reverse = False
+                #else:
+                #    assert False, "shouldn't be here."
+                #new_assignments = get_k_sorted_hparams(k-i, lr_lower_bound, lr_upper_bound)
+                #if reverse:
+                #    new_assignments.reverse()
+                #all_assignments[i:len(all_assignments)] = new_assignments
                 
 
         # to fine tune the learned model
@@ -263,7 +269,7 @@ def train_m_then_n_models(m,n,counter, total_evals,start_time,**kwargs):
 
 # hparams to search over (from paper):
 # clip_grad, dropout, learning rate, rnn_dropout, embed_dropout, l2 regularization (actually weight decay)
-def hparam_sample(lr_bounds=[LR_LOWER_BOUND, LR_UPPER_BOUND]):
+def hparam_sample(lr_bounds):
     assignments = {
         "clip_grad": np.random.uniform(1.0, 5.0),
         "dropout": np.random.uniform(0.0, 0.5),
@@ -277,11 +283,12 @@ def hparam_sample(lr_bounds=[LR_LOWER_BOUND, LR_UPPER_BOUND]):
 
 
 # orders them in increasing order of lr
-def get_k_sorted_hparams(k, lr_upper_bound=LR_UPPER_BOUND, lr_lower_bound=LR_LOWER_BOUND):
+def get_k_sorted_hparams(k, lr_upper_bound, lr_lower_bound, sort=True):
     all_assignments = []
 
     for i in range(k):
         cur = hparam_sample(lr_bounds=[lr_lower_bound, lr_upper_bound])
         all_assignments.append([cur['lr'], cur])
-    all_assignments.sort()
+    if sort:
+        all_assignments.sort()
     return [assignment[1] for assignment in all_assignments]
