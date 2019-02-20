@@ -7,7 +7,13 @@ def select_param_value(name, default_value):
     return os.environ[name] if name in os.environ else default_value
 
 
-def preload_embed(dir_location):
+def preload_embed(dir_location, bert_embed):
+    if bert_embed:
+        return preload_bert_embed(dir_location)
+    else:
+        return preload_wordvec_embed(dir_location)
+
+def preload_wordvec_embed(dir_location):
     start = time.time()
     import dataloader
     embs =  dataloader.load_embedding(os.path.join(dir_location,"embedding_filtered"))
@@ -16,6 +22,14 @@ def preload_embed(dir_location):
     print("")
     return embs
 
+def preload_bert_embed(data_dir_path):
+    start = time.time()
+    import dataloader
+    data =  dataloader.read_bert(data_dir_path)
+    print("took {} seconds".format(time.time()-start))
+    print("preloaded bert embeddings.")
+    print("")
+    return data
 
 def general_arg_parser():
     """ CLI args related to training and testing models. """

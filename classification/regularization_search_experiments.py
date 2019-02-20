@@ -7,6 +7,10 @@ import time, os
 LR_LOWER_BOUND = 7*10**-3
 LR_UPPER_BOUND = .5
 
+BERT_LR_LOWER_BOUND = 7*10**-5
+BERT_LR_UPPER_BOUND = .5*10**-2
+
+
 def search_reg_str_entropy(cur_assignments, kwargs):
     starting_reg_str = kwargs["reg_strength"]
     file_base = "/home/jessedd/projects/rational-recurrences/classification/logging/" + kwargs["dataset"]    
@@ -147,8 +151,12 @@ def train_k_then_l_models(k,l,counter,total_evals,start_time, logging_dir, **kwa
         }
 
     reg_search_counters = []
-    lr_lower_bound = LR_LOWER_BOUND
-    lr_upper_bound = LR_UPPER_BOUND
+    if kwargs["bert_embed"]:
+        lr_lower_bound = BERT_LR_LOWER_BOUND
+        lr_upper_bound = BERT_LR_UPPER_BOUND
+    else:
+        lr_lower_bound = LR_LOWER_BOUND
+        lr_upper_bound = LR_UPPER_BOUND
     all_assignments = get_k_sorted_hparams(k, lr_lower_bound, lr_upper_bound)
     for i in range(len(all_assignments)):
 
@@ -208,9 +216,11 @@ def train_k_then_l_models(k,l,counter,total_evals,start_time, logging_dir, **kwa
 
     kwargs["reg_strength"] = best["reg_strength"]
     for i in range(l):
+        kwargs["lr_patience"] = 9999999
         args = ExperimentParams(counter = counter[0], filename_suffix="_{}".format(i),**kwargs, **best["assignment"])
         cur_valid_err, learned_d_out, reduced_model_path = train_classifier.main(args)
-
+        del kwargs["lr_patience"]
+        
         # to fine tune the model trained on the above line
         kwargs_fine_tune = get_kwargs_for_fine_tuning(kwargs, reduced_model_path, learned_d_out, learned_pattern)
         args = ExperimentParams(counter = counter[0], filename_suffix="_{}".format(i), **kwargs_fine_tune, **best["assignment"])
@@ -223,9 +233,15 @@ def train_k_then_l_models(k,l,counter,total_evals,start_time, logging_dir, **kwa
 
 
 def train_m_then_n_models(m,n,counter, total_evals,start_time,**kwargs):
+    if kwargs["bert_embed"]:
+        lr_lower_bound = BERT_LR_LOWER_BOUND
+        lr_upper_bound = BERT_LR_UPPER_BOUND
+    else:
+        lr_lower_bound = LR_LOWER_BOUND
+        lr_upper_bound = LR_UPPER_BOUND
     best_assignment = None
     best_valid_err = 1
-    all_assignments = get_k_sorted_hparams(m)
+    all_assignments = get_k_sorted_hparams(m, lr_lower_bound, lr_upper_bound)
     for i in range(m):
         cur_assignments = all_assignments[i]
         args = ExperimentParams(counter = counter[0], **kwargs, **cur_assignments)
@@ -244,7 +260,6 @@ def train_m_then_n_models(m,n,counter, total_evals,start_time,**kwargs):
         print("trained {} out of {} hyperparameter assignments, so far {} seconds".format(
             counter[0],total_evals, round(time.time()-start_time, 3)))
     return best_assignment
-
 
 # hparams to search over (from paper):
 # clip_grad, dropout, learning rate, rnn_dropout, embed_dropout, l2 regularization (actually weight decay)

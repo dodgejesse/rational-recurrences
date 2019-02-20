@@ -273,14 +273,9 @@ def init_logging(args):
     if args.loaded_embedding:
         tmp_embed = args.loaded_embedding
         args.loaded_embedding=True
-    if args.loaded_data:
-        tmp_data = args.loaded_data
-        args.loaded_data = True
     logging_file.write(str(args))
     if args.loaded_embedding:
         args.loaded_embedding = tmp_embed
-    if args.loaded_data:
-        args.loaded_data = tmp_data
     
     print("saving in {}".format(dir_path + filename))
     return logging_file
@@ -621,20 +616,20 @@ def main_init(args):
 
 
     if args.bert_embed:
-        if not args.loaded_data:
+        if not args.loaded_embedding:
             train_X, train_Y, valid_X, valid_Y, test_X, test_Y = dataloader.read_bert(args.path)
         else:
-            train_X, train_Y, valid_X, valid_Y, test_X, test_Y = args.loaded_data
+            train_X, train_Y, valid_X, valid_Y, test_X, test_Y = args.loaded_embedding
 
     else:
         train_X, train_Y, valid_X, valid_Y, test_X, test_Y = dataloader.read_SST(args.path)
 
     data = train_X + valid_X + test_X
 
-    if args.loaded_embedding:
-        embs = args.loaded_embedding
-    elif args.bert_embed:
+    if args.bert_embed:
         embs = None
+    elif args.loaded_embedding:
+        embs = args.loaded_embedding
     else:
         embs = dataloader.load_embedding(args.embedding)
 

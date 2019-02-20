@@ -65,7 +65,6 @@ class ExperimentParams:
                  output_dir=None,
                  input_model=None,
                  bert_embed=False,
-                 loaded_data=None,
                  weight_norm=False,
                  fine_tune=False,
                  reduced_model_path=None
@@ -119,7 +118,6 @@ class ExperimentParams:
         self.output_dir = output_dir
         self.input_model = input_model
         self.bert_embed = bert_embed
-        self.loaded_data = loaded_data
         self.weight_norm = weight_norm
         self.fine_tune = fine_tune
         self.reduced_model_path = reduced_model_path
