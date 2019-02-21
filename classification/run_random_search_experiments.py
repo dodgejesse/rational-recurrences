@@ -29,10 +29,10 @@ def main(argv):
         "use_rho": False,
         "gpu": argv.gpu,
         "max_epoch": argv.max_epoch, "patience": argv.patience,
-        "batch_size": experiment_tools.select_param_value('BATCH_SIZE', argv.batch_size),
+        "batch_size": int(experiment_tools.select_param_value('BATCH_SIZE', argv.batch_size)),
         "use_last_cs": argv.use_last_cs,
         "logging_dir": argv.logging_dir,
-        "reg_strength": experiment_tools.select_param_value('REG_STRENGTH', argv.reg_strength),
+        "reg_strength": float(experiment_tools.select_param_value('REG_STRENGTH', argv.reg_strength)),
         "base_data_dir": argv.base_data_dir,
         "bert_embed": experiment_tools.select_param_value('BERT_EMBED', argv.bert_embed)
     }
