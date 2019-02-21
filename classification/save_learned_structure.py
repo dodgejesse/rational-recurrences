@@ -26,7 +26,7 @@ def to_file(model, args, data_x, data_y, print_debug = True):
     return new_d_out, reduced_model_path
 
 def remove_old(old_reduced_model_path):
-    if old_reduced_model_path != "":
+    if old_reduced_model_path != "" and os.path.isfile(old_reduced_model_path):
         os.remove(old_reduced_model_path)
 
 def get_model_filepath(args, d_out):

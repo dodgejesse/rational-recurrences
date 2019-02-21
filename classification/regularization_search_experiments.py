@@ -3,6 +3,7 @@ from experiment_params import ExperimentParams
 import train_classifier
 import numpy as np
 import time, os
+import save_learned_structure
 
 LR_LOWER_BOUND = 7*10**-3
 LR_UPPER_BOUND = .5
@@ -78,9 +79,8 @@ def search_reg_str_l1(cur_assignments, kwargs, global_counter):
     
     while not found_good_reg_str:
         # deleting models which aren't going to be used
-        
-        if reduced_model_path != "":
-            os.remove(reduced_model_path)
+
+        save_learned_structure.remove_old(reduced_model_path)
 
         # if more than 25 regularization strengths have been tried, throw out hparam assignment and resample
         if counter > 25:
@@ -188,8 +188,7 @@ def train_k_then_l_models(k,l,counter,total_evals,start_time, logging_dir, **kwa
             if lr_judgement == "okay_lr":
                 valid_assignment = True
             else:
-                if reduced_model_path != "":
-                    os.remove(reduced_model_path)
+                save_learned_structure.remove_old(reduced_model_path)
                 new_assignments = get_k_sorted_hparams(k-i, lr_lower_bound, lr_upper_bound, sort=False)
                 all_assignments[i:len(all_assignments)] = new_assignments
 
