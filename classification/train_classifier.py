@@ -410,7 +410,7 @@ def train_model(epoch, model, optimizer,
         new_model_valid_err = 1.0
         new_model, new_d_out = save_learned_structure.extract_learned_structure(model, args)
         if new_d_out.split(",")[-1] != args.d_out:
-            save_learned_structure.check_new_model_predicts_same(model, new_model, valid_x, valid_y, new_d_out)
+            save_learned_structure.check_new_model_predicts_same(model, new_model, valid_x, valid_y, new_d_out, args.gpu)
             if new_model is not None:
                 new_model_valid_err = eval_model(niter, new_model, valid_x, valid_y)
         else:

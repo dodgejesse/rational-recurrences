@@ -13,7 +13,7 @@ ALLWFSA = None
 def to_file(model, args, data_x, data_y, print_debug = True):
     new_model, new_d_out = extract_learned_structure(model, args)
     if print_debug:
-        check_new_model_predicts_same(model, new_model, data_x, data_y, new_d_out)
+        check_new_model_predicts_same(model, new_model, data_x, data_y, new_d_out, args.gpu)
 
     reduced_model_path = get_model_filepath(args, new_d_out)
     print("Writing model to", reduced_model_path)
@@ -33,20 +33,27 @@ def get_model_filepath(args, d_out):
     return reduced_model_path
 
 # a method used to make sure the extracted structure behaves similarly to the learned model
-def check_new_model_predicts_same(model, new_model, data_x, data_y, new_d_out):
+def check_new_model_predicts_same(model, new_model, data_x, data_y, new_d_out, gpu):
     # can manually look at feats vs new_model_feats, should be close (and identical for max-length WFSAs)
     #if check == "manually check features from wfsa":
     if True:
         cur_x = (data_x[0])
         model_wfsakeep_pred = predict_one_example(model, ALLWFSA, cur_x)
 
-        indices_in_new_model = torch.autograd.Variable(torch.arange(ALLWFSA.shape[0]).type(torch.cuda.LongTensor))
+
+        if gpu:
+            indices_in_new_model = torch.autograd.Variable(torch.arange(ALLWFSA.shape[0]).type(torch.cuda.LongTensor))
+        else:
+            indices_in_new_model = torch.autograd.Variable(torch.arange(ALLWFSA.shape[0]).type(torch.LongTensor))
+
         new_model_pred = predict_one_example(new_model, indices_in_new_model, cur_x)
         
         # the features which didn't make it into the smaller model:
         model_indices_not_in_new = [int(x) for x in torch.arange(24) if not x in ALLWFSA.data]
-        model_indices_not_in_new = torch.autograd.Variable(torch.cuda.LongTensor(model_indices_not_in_new))
-
+        if gpu:
+            model_indices_not_in_new = torch.autograd.Variable(torch.cuda.LongTensor(model_indices_not_in_new))
+        else:
+            model_indices_not_in_new = torch.autograd.Variable(torch.LongTensor(model_indices_not_in_new))
         
         model_wfsadiscard_pred = predict_one_example(model, model_indices_not_in_new, cur_x, add_bias = False)
 
@@ -122,7 +129,6 @@ def encoder_fwd(model, cur_x):
     return feat
 
 def extract_learned_structure(model, args, epoch = 0):
-
     states = train_classifier.get_states_weights(model, args)
     num_wfsas = sum([int(one_size) for one_size in args.d_out.split(";")[0].split(",")])
     layers = len(model.encoder.rnn_lst)
