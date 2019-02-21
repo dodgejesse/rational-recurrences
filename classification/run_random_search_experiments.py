@@ -140,7 +140,7 @@ def training_arg_parser():
     p.add_argument("--patience", help="Patience parameter (for early stopping)", type=int, default=30)
     p.add_argument("--sparsity_type", help="Type of sparsity (wfsa, edges, states, rho_entropy or none)",
                    type=str, default="states")
-    p.add_argument("--reg_strength", help="Regularization strength", type=float, default=8 * 10 ** -2)
+    p.add_argument("--reg_strength", help="Regularization strength", type=float, default=8 * 10 ** -6)
     p.add_argument("--semiring", help="Type of semiring (plus_times, max_times, max_plus)",
                    type=str, default="plus_times")
     p.add_argument("--bert_embed", help="True if using BERT embeddings.", type=str, default="false")

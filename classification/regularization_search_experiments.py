@@ -82,7 +82,8 @@ def search_reg_str_l1(cur_assignments, kwargs, global_counter):
         if reduced_model_path != "":
             os.remove(reduced_model_path)
 
-        if counter > 15:
+        # if more than 25 regularization strengths have been tried, throw out hparam assignment and resample
+        if counter > 25:
             kwargs["reg_strength"] = starting_reg_str
             return counter, "bad_hparams", cur_valid_err, learned_d_out, reduced_model_path
 
