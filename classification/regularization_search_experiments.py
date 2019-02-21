@@ -80,6 +80,11 @@ def search_reg_str_l1(cur_assignments, kwargs, global_counter):
         # deleting models which aren't going to be used
         if reduced_model_path != "":
             os.remove(reduced_model_path)
+
+        if counter > 15:
+            kwargs["reg_strength"] = starting_reg_str
+            return counter, "bad_hparams", cur_valid_err, learned_d_out, reduced_model_path
+
         counter += 1
         args = ExperimentParams(counter = global_counter, **kwargs, **cur_assignments)
         cur_valid_err, learned_d_out, reduced_model_path = train_classifier.main(args)
@@ -112,11 +117,9 @@ def search_reg_str_l1(cur_assignments, kwargs, global_counter):
                     return counter, "too_big_lr", cur_valid_err, learned_d_out, reduced_model_path
                 else:
                     return counter, "too_small_lr", cur_valid_err, learned_d_out, reduced_model_path
-        if counter > 15:
-            kwargs["reg_strength"] = starting_reg_str
-            return counter, "bad_hparams", cur_valid_err, learned_d_out, reduced_model_path
         else:
             found_good_reg_str = True
+
     return counter, "okay_lr", cur_valid_err, learned_d_out, reduced_model_path
 
 # to finetune the learned structure
