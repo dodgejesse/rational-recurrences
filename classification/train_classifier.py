@@ -409,12 +409,12 @@ def train_model(epoch, model, optimizer,
     if args.sparsity_type == "states":
         new_model_valid_err = 1.0
         new_model, new_d_out = save_learned_structure.extract_learned_structure(model, args)
-        if new_d_out.split(",")[-1] != args.d_out:
-            save_learned_structure.check_new_model_predicts_same(model, new_model, valid_x, valid_y, new_d_out, args.gpu)
-            if new_model is not None:
+        if new_model is not None:
+            if new_d_out.split(",")[-1] != args.d_out:
+                save_learned_structure.check_new_model_predicts_same(model, new_model, valid_x, valid_y, new_d_out, args.gpu)
                 new_model_valid_err = eval_model(niter, new_model, valid_x, valid_y)
-        else:
-            new_model_valid_err = valid_err
+            else:
+                new_model_valid_err = valid_err
         epoch_string += " extracted_structure valid_err={:.6f} |".format(new_model_valid_err)
 
     epoch_string += "\n"

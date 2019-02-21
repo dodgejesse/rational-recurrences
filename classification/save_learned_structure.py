@@ -12,6 +12,10 @@ ALLWFSA = None
 
 def to_file(model, args, data_x, data_y, print_debug = True):
     new_model, new_d_out = extract_learned_structure(model, args)
+
+    if new_model is None:
+        return new_d_out, ""
+        
     if print_debug:
         check_new_model_predicts_same(model, new_model, data_x, data_y, new_d_out, args.gpu)
 
@@ -22,7 +26,8 @@ def to_file(model, args, data_x, data_y, print_debug = True):
     return new_d_out, reduced_model_path
 
 def remove_old(old_reduced_model_path):
-    os.remove(old_reduced_model_path)
+    if old_reduced_model_path != "":
+        os.remove(old_reduced_model_path)
 
 def get_model_filepath(args, d_out):
     if args.language_modeling:
@@ -139,7 +144,7 @@ def extract_learned_structure(model, args, epoch = 0):
         num_ngrams, num_of_each_ngram = find_num_ngrams(cur_layer_states, num_wfsas)
    
         if max(num_ngrams) == -1:
-            return None, 0
+            return None, "0,0,0,0"
 
         num_ngrams_per_layer.append(num_ngrams)
         num_of_each_ngram_per_layer.append(num_of_each_ngram)

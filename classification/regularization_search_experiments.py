@@ -78,6 +78,7 @@ def search_reg_str_l1(cur_assignments, kwargs, global_counter):
     
     while not found_good_reg_str:
         # deleting models which aren't going to be used
+        
         if reduced_model_path != "":
             os.remove(reduced_model_path)
 
@@ -186,6 +187,8 @@ def train_k_then_l_models(k,l,counter,total_evals,start_time, logging_dir, **kwa
             if lr_judgement == "okay_lr":
                 valid_assignment = True
             else:
+                if reduced_model_path != "":
+                    os.remove(reduced_model_path)
                 new_assignments = get_k_sorted_hparams(k-i, lr_lower_bound, lr_upper_bound, sort=False)
                 all_assignments[i:len(all_assignments)] = new_assignments
 
