@@ -546,7 +546,7 @@ def print_top_traces(top_traces, tmp_patt_len=None):
 
         print("{}. {}.".format(index, u_indices[:tmp_patt_len]), end=' ')
         print_rec(doc, 0, u_indices, tmp_patt_len)
-        print(float(score))
+        print(round(float(score), 4))
 
     # Print words from one state
     def print_rec(doc, u_index, u_indices, tmp_patt_len):
