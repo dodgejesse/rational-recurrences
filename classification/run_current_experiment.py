@@ -38,15 +38,13 @@ def main():
         
 
     if exp_num == -1:
-
-        # adam_layers=1_lr=2.407E-02_dout=24_drout=0.1809_rnndout=0.1537_embdout=0.3141_wdecay=3.64E-07_clip=2.82_pattern=4-gram_sparsity=states_regstr=3.125E-04_goalparams=20_
         
         args = ExperimentParams(pattern = "4-gram", d_out = "24", reg_goal_params = 20,
                                 filename_prefix="all_cs_and_equal_rho/saving_model_for_interpretability/",
                                 seed = 314159, loaded_embedding = loaded_embedding,
                                 dataset = "amazon_categories/original_mix/", use_rho = False,
                                 clip_grad = 2.82, dropout = 0.1809, rnn_dropout = 0.1537, embed_dropout = 0.3141,
-                                lr = 2.407E-02, weight_decay = 3.64E-07, depth = 1, output_dir = "/home/jessedd/projects/rational-recurrences/classification/logging/amazon_categories/original_mix/all_cs_and_equal_rho/saving_model_for_interpretability",
+                                lr = 2.407E-02, weight_decay = 3.64E-07, depth = 1,
                                 reg_strength = 3.125E-04, sparsity_type = "states")
         cur_valid_err, _, _ = train_classifier.main(args)
 

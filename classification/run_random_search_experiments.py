@@ -13,7 +13,7 @@ from experiment_params import ExperimentParams
 
 
 def main(argv):
-    loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_data_dir, argv.dataset))
+    loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_data_dir, argv.dataset), argv.bert_embed)
 
     seed = experiment_tools.select_param_value('SEED', argv.seed)
     if seed is not None:
@@ -31,18 +31,24 @@ def main(argv):
         "batch_size": argv.batch_size, "use_last_cs": argv.use_last_cs,
         "logging_dir": argv.logging_dir,
         "reg_strength": argv.reg_strength,
-        "base_data_dir": argv.base_data_dir
+        "base_data_dir": argv.base_data_dir,
+        "bert_embed": argv.bert_embed
     }
 
+    # if reg_goal_params is not False, it should a comma-separated string.
     reg_goal_params = experiment_tools.select_param_value('REG_GOAL_PARAMS', argv.reg_goal_params)
-
+    if reg_goal_params != "False":
+        reg_goal_params = [int(x) for x in reg_goal_params.split(",")]
+    else:
+        reg_goal_params = False
+        
     rand_search_args = {
         "k": argv.k,
         "l": argv.l,
         "m": argv.m,
         "n": argv.n,
         "sparsity_type": argv.sparsity_type,
-        "reg_goal_params_list": [int(x) for x in reg_goal_params.split(",")]
+        "reg_goal_params_list": reg_goal_params
     }
 
     print(training_args)
@@ -50,10 +56,27 @@ def main(argv):
 
     training_args["loaded_embedding"] = loaded_embedding
 
-    run_grid_search(training_args, rand_search_args)
+    if argv.baseline:
+        run_baseline_experiment(training_args, rand_search_args)
+    else:
+        run_random_search(training_args, rand_search_args)
 
+def run_baseline_experiment(training_args, rand_search_args):
+    start_time = time.time()
+    counter = [0]
 
-def run_grid_search(training_args, rand_search_args):
+    total_evals = rand_search_args["m"] + rand_search_args["n"]
+    
+    assert training_args["reg_strength"] == 0, "No regularization for baseline experiments"
+    assert rand_search_args["sparsity_type"] == "none", "No regularization for baseline experiments"
+    assert not rand_search_args["reg_goal_params_list"], "No regularization for baseline experiments"
+
+    args = regularization_search_experiments.train_m_then_n_models(m=rand_search_args["m"],
+                                                                   n=rand_search_args["n"], counter=counter,
+                                                                   total_evals=total_evals, start_time=start_time,
+                                                                   **training_args)
+
+def run_random_search(training_args, rand_search_args):
     start_time = time.time()
     counter = [0]
 
@@ -102,7 +125,7 @@ def get_unregularized_args(training_args, best):
 def training_arg_parser():
     """ CLI args related to training models. """
     p = ArgumentParser(add_help=False)
-    p.add_argument('--reg_goal_params', type=str, default="80,60,40,20")
+    p.add_argument('--reg_goal_params', default="80,60,40,20")
     p.add_argument('--filename_prefix', help='logging file prefix', type=str,
                    default="all_cs_and_equal_rho/saving_model_for_interpretability/")
     p.add_argument("--logging_dir", help="Logging directory", type=str, required=True)
@@ -113,11 +136,14 @@ def training_arg_parser():
     p.add_argument("--reg_strength", help="Regularization strength", type=float, default=8 * 10 ** -6)
     p.add_argument("--semiring", help="Type of semiring (plus_times, max_times, max_plus)",
                    type=str, default="plus_times")
+    p.add_argument("--bert_embed", help="True if using BERT embeddings.", type=bool, default=False)
     p.add_argument("--k", help="K argument for random search", type=int, default=20)
     p.add_argument("--l", help="L argument for random search", type=int, default=5)
     p.add_argument("--m", help="M argument for random search", type=int, default=20)
     p.add_argument("--n", help="N argument for random search", type=int, default=5)
 
+    p.add_argument("--baseline", help="For running baselines.", action="store_true")
+    
     return p
 
 
