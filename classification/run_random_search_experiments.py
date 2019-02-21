@@ -11,9 +11,13 @@ import regularization_search_experiments
 from experiment_params import ExperimentParams
 
 
+def str2bool(str):
+  return str.lower() in ["true", "1"]
 
 def main(argv):
-    loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_data_dir, argv.dataset), argv.bert_embed)
+    is_bert = str2bool(experiment_tools.select_param_value('BERT_EMBED', argv.bert_embed))
+
+    loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_data_dir, argv.dataset), is_bert)
 
     seed = experiment_tools.select_param_value('SEED', argv.seed)
     if seed is not None:
@@ -34,8 +38,9 @@ def main(argv):
         "logging_dir": argv.logging_dir,
         "reg_strength": float(experiment_tools.select_param_value('REG_STRENGTH', argv.reg_strength)),
         "base_data_dir": argv.base_data_dir,
-        "bert_embed": experiment_tools.select_param_value('BERT_EMBED', argv.bert_embed)
+        "bert_embed": is_bert
     }
+
 
     # if reg_goal_params is not False, it should a comma-separated string.
     reg_goal_params = experiment_tools.select_param_value('REG_GOAL_PARAMS', argv.reg_goal_params)
