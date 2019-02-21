@@ -25,14 +25,16 @@ def main(argv):
         'semiring': experiment_tools.select_param_value('SEMIRING', argv.semiring),
         "depth": argv.depth,
         "filename_prefix": argv.filename_prefix,
-        "dataset": argv.dataset, "use_rho": False,
+        "dataset": experiment_tools.select_param_value('DATASET', argv.dataset),
+        "use_rho": False,
         "gpu": argv.gpu,
         "max_epoch": argv.max_epoch, "patience": argv.patience,
-        "batch_size": argv.batch_size, "use_last_cs": argv.use_last_cs,
+        "batch_size": experiment_tools.select_param_value('BATCH_SIZE', argv.batch_size),
+        "use_last_cs": argv.use_last_cs,
         "logging_dir": argv.logging_dir,
-        "reg_strength": argv.reg_strength,
+        "reg_strength": experiment_tools.select_param_value('REG_STRENGTH', argv.reg_strength),
         "base_data_dir": argv.base_data_dir,
-        "bert_embed": argv.bert_embed
+        "bert_embed": experiment_tools.select_param_value('BERT_EMBED', argv.bert_embed)
     }
 
     # if reg_goal_params is not False, it should a comma-separated string.
@@ -47,7 +49,7 @@ def main(argv):
         "l": argv.l,
         "m": argv.m,
         "n": argv.n,
-        "sparsity_type": argv.sparsity_type,
+        "sparsity_type": experiment_tools.select_param_value('SPARSITY_TYPE', argv.sparsity_type),
         "reg_goal_params_list": reg_goal_params
     }
 
