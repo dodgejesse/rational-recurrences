@@ -7,7 +7,7 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 
 def main(argv):
-    loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_data_dir,argv.dataset))
+    loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_data_dir,argv.dataset), argv.bert_embed)
 
     # a basic experiment
     args = ExperimentParams(pattern = argv.pattern, d_out = argv.d_out,
