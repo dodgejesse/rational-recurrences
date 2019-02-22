@@ -143,7 +143,6 @@ def training_arg_parser():
     p.add_argument("--reg_strength", help="Regularization strength", type=float, default=8 * 10 ** -6)
     p.add_argument("--semiring", help="Type of semiring (plus_times, max_times, max_plus)",
                    type=str, default="plus_times")
-    p.add_argument("--bert_embed", help="True if using BERT embeddings.", type=str, default="false")
     p.add_argument("--k", help="K argument for random search", type=int, default=20)
     p.add_argument("--l", help="L argument for random search", type=int, default=5)
     p.add_argument("--m", help="M argument for random search", type=int, default=20)
