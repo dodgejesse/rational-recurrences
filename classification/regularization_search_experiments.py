@@ -63,11 +63,10 @@ def search_reg_str_entropy(cur_assignments, kwargs):
 # too small learning rate
 # too large learning rate
 # too large step size for reg strength, so it's too big then too small
-def search_reg_str_l1(cur_assignments, kwargs, global_counter):
+def search_reg_str_l1(cur_assignments, kwargs, global_counter, distance_from_target = 10):
     # the final number of params is within this amount of target
     smallest_reg_str = 10**-9
     largest_reg_str = 10**2
-    distance_from_target = 10
     starting_reg_str = kwargs["reg_strength"]
     found_good_reg_str = False
     too_small = False
@@ -136,7 +135,7 @@ def get_kwargs_for_fine_tuning(kwargs, reduced_model_path, learned_d_out, patter
     new_kwargs["pattern"] = pattern
     return new_kwargs
     
-def train_k_then_l_models(k,l,counter,total_evals,start_time, logging_dir, **kwargs):
+def train_k_then_l_models(k,l,counter,total_evals,start_time, logging_dir, distance_from_target, **kwargs):
     if "seed" in kwargs and kwargs["seed"] is not None:
         np.random.seed(kwargs["seed"])
         
@@ -179,7 +178,7 @@ def train_k_then_l_models(k,l,counter,total_evals,start_time, logging_dir, **kwa
                 one_search_counter, lr_judgement = search_reg_str_entropy(cur_assignments, kwargs)
             elif kwargs["sparsity_type"] == "states":
                 one_search_counter, lr_judgement, cur_valid_err, learned_d_out, reduced_model_path = search_reg_str_l1(
-                    cur_assignments, kwargs, counter[0])
+                    cur_assignments, kwargs, counter[0], distance_from_target)
                 learned_pattern = "1-gram,2-gram,3-gram,4-gram"
 
             del kwargs["lr_patience"]

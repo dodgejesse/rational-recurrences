@@ -110,6 +110,7 @@ def main():
                     filename_prefix="all_cs_and_equal_rho/hparam_opt/structure_search/add_reg_term_to_loss/",
                     seed=None,
                     loaded_embedding=loaded_embedding, reg_strength = 8*10**-6,
+                    distance_from_target=10,
                     dataset = "amazon_categories/" + category)
                 
                 all_reg_search_counters.append(reg_search_counters)
@@ -140,6 +141,7 @@ def main():
                     rho_sum_to_one=True, reg_strength = 1, d_out=d_out,
                     filename_prefix="only_last_cs/hparam_opt/reg_str_search/",
                     dataset = "amazon_categories/" + category, seed=None,
+                    distance_from_target=10,
                     loaded_embedding=loaded_embedding)
                 
     # baseline for rho_entropy experiments
