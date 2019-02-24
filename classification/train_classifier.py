@@ -126,6 +126,9 @@ class Model(nn.Module):
         return traces
 
 def eval_model(niter, model, valid_x, valid_y):
+    if not len(valid_x):
+        return -1
+
     model.eval()
     criterion = nn.CrossEntropyLoss()
     correct = 0.0
@@ -618,7 +621,7 @@ def main_test(args):
         model.cuda()
 
 
-    names = ['valid', 'test'] if args.bert_embed  else ['train', 'valid', 'test']
+    names = ['train', 'valid', 'test']
 
 
     errs = [eval_model(0, model, d, l) for [d,l] in zip(batched_datasets, batched_labels)]
@@ -633,7 +636,6 @@ def main_init(args):
     if args.seed:
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
-
 
     if args.bert_embed:
         if not args.loaded_embedding:
