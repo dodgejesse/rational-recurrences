@@ -9,20 +9,26 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 def main(argv):
     loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_data_dir,argv.dataset), argv.bert_embed, False)
 
-    # a basic experiment
-    args = ExperimentParams(pattern = argv.pattern, d_out = argv.d_out,
-                                seed = argv.seed, loaded_embedding = loaded_embedding,
-                                dataset = argv.dataset, use_rho = False,
-                                depth = argv.depth, gpu=argv.gpu,
-                                batch_size=argv.batch_size, use_last_cs=argv.use_last_cs,
-                                base_data_dir = argv.base_data_dir, input_model=argv.input_model,
-                                weight_norm = argv.weight_norm,
-                                bert_embed = argv.bert_embed)
+    models = argv.input_model.split(",")
+    d_outs = argv.d_out.split("_")
+    patterns = argv.pattern.split("_")
 
-    if argv.visualize > 0:
-        train_classifier.main_visualize(args, os.path.join(argv.base_data_dir,argv.dataset), argv.visualize)
-    else:
-        _ = train_classifier.main_test(args)
+    for (model,d_out, pattern) in zip(models, d_outs, patterns):
+        print("Checking model {} with pattern={} and d_out={}".format(model, d_out, pattern))
+        # a basic experiment
+        args = ExperimentParams(pattern = pattern, d_out = d_out,
+                                    seed = argv.seed, loaded_embedding = loaded_embedding,
+                                    dataset = argv.dataset, use_rho = False,
+                                    depth = argv.depth, gpu=argv.gpu,
+                                    batch_size=argv.batch_size, use_last_cs=argv.use_last_cs,
+                                    base_data_dir = argv.base_data_dir, input_model=model,
+                                    weight_norm = argv.weight_norm,
+                                    bert_embed = argv.bert_embed)
+
+        if argv.visualize > 0:
+            train_classifier.main_visualize(args, os.path.join(argv.base_data_dir,argv.dataset), argv.visualize)
+        else:
+            _ = train_classifier.main_test(args)
 
     return 0
         
