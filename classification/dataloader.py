@@ -107,19 +107,24 @@ def read_SST(path, seed=1234):
     return train_x, train_y, valid_x, valid_y, test_x, test_y
 
 # to read a dataset preprocessed with bert embeddings.
-def read_bert(path, seed=1234):
-    train_path = os.path.join(path, "train_bert")
+def read_bert(path, read_train=True, seed=1234):
     valid_path = os.path.join(path, "dev_bert")
-    test_path = os.path.join(path, "test_bert")
-    train_x, train_y = read_bert_file(train_path)
     valid_x, valid_y = read_bert_file(valid_path)
+    test_path = os.path.join(path, "test_bert")
     test_x, test_y = read_bert_file(test_path)
-    random.seed(seed)
-    perm = list(range(len(train_x)))
-    random.shuffle(perm)
-    train_x = [ train_x[i] for i in perm ]
-    train_y = [ train_y[i] for i in perm ]
-    return train_x, train_y, valid_x, valid_y, test_x, test_y
+
+    if read_train:
+        train_path = os.path.join(path, "train_bert")
+        train_x, train_y = read_bert_file(train_path)
+        random.seed(seed)
+        perm = list(range(len(train_x)))
+        random.shuffle(perm)
+        train_x = [ train_x[i] for i in perm ]
+        train_y = [ train_y[i] for i in perm ]
+
+        return train_x, train_y, valid_x, valid_y, test_x, test_y
+    else:
+        valid_x, valid_y, test_x, test_y
 
 def read_bert_file(path):
     data = []

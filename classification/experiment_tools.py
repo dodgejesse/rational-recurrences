@@ -7,9 +7,9 @@ def select_param_value(name, default_value):
     return os.environ[name] if name in os.environ else default_value
 
 
-def preload_embed(dir_location, bert_embed):
+def preload_embed(dir_location, bert_embed, read_train=True):
     if bert_embed:
-        return preload_bert_embed(dir_location)
+        return preload_bert_embed(dir_location, read_train)
     else:
         return preload_wordvec_embed(dir_location)
 
@@ -22,10 +22,10 @@ def preload_wordvec_embed(dir_location):
     print("")
     return embs
 
-def preload_bert_embed(data_dir_path):
+def preload_bert_embed(data_dir_path, read_train=True):
     start = time.time()
     import dataloader
-    data =  dataloader.read_bert(data_dir_path)
+    data =  dataloader.read_bert(data_dir_path, read_train)
     print("took {} seconds".format(time.time()-start))
     print("preloaded bert embeddings.")
     print("")
@@ -44,7 +44,7 @@ def general_arg_parser():
     p.add_argument("-b", "--batch_size", help="Batch size", type=int, default=64)
     p.add_argument("--use_last_cs", help="Only use last hidden state as output value", action='store_true')
     p.add_argument("--weight_norm", help="Normalize weights", action='store_true')
-    p.add_argument("--bert_embed", help="True if using BERT embeddings.", type=str, default="false")
+    p.add_argument("--bert_embed", help="True if using BERT embeddings.", type=bool, default=False)
 
     # p.add_argument("--max_doc_len",
     #                help="Maximum doc length. For longer documents, spans of length max_doc_len will be randomly "

@@ -17,7 +17,7 @@ def str2bool(str):
 def main(argv):
     is_bert = str2bool(experiment_tools.select_param_value('BERT_EMBED', argv.bert_embed))
 
-    loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_data_dir, argv.dataset), is_bert)
+    loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_data_dir, argv.dataset), is_bert, True)
 
     seed = experiment_tools.select_param_value('SEED', argv.seed)
     if seed is not None:

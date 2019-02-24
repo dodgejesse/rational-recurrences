@@ -7,7 +7,7 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 
 def main(argv):
-    loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_data_dir,argv.dataset), argv.bert_embed)
+    loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_data_dir,argv.dataset), argv.bert_embed, False)
 
     # a basic experiment
     args = ExperimentParams(pattern = argv.pattern, d_out = argv.d_out,
@@ -16,7 +16,8 @@ def main(argv):
                                 depth = argv.depth, gpu=argv.gpu,
                                 batch_size=argv.batch_size, use_last_cs=argv.use_last_cs,
                                 base_data_dir = argv.base_data_dir, input_model=argv.input_model,
-                                weight_norm = argv.weight_norm)
+                                weight_norm = argv.weight_norm,
+                                bert_embed = argv.bert_embed)
 
     if argv.visualize > 0:
         train_classifier.main_visualize(args, os.path.join(argv.base_data_dir,argv.dataset), argv.visualize)
