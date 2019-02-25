@@ -110,8 +110,6 @@ def read_SST(path, seed=1234):
 def read_bert(path, read_train=True, seed=1234):
     valid_path = os.path.join(path, "dev_bert")
     valid_x, valid_y = read_bert_file(valid_path)
-    test_path = os.path.join(path, "test_bert")
-    test_x, test_y = read_bert_file(test_path)
 
 
     if read_train:
@@ -123,8 +121,11 @@ def read_bert(path, read_train=True, seed=1234):
         train_x = [ train_x[i] for i in perm ]
         train_y = [ train_y[i] for i in perm ]
 
-        return train_x, train_y, valid_x, valid_y, test_x, test_y
+        return train_x, train_y, valid_x, valid_y, [], []#, test_x, test_y
     else:
+        test_path = os.path.join(path, "test_bert")
+        test_x, test_y = read_bert_file(test_path)
+
         [], [], valid_x, valid_y, test_x, test_y
 
 def read_bert_file(path):
