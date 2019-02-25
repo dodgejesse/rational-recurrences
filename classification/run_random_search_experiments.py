@@ -38,8 +38,7 @@ def main(argv):
         "logging_dir": argv.logging_dir,
         "reg_strength": float(experiment_tools.select_param_value('REG_STRENGTH', argv.reg_strength)),
         "base_data_dir": argv.base_data_dir,
-        "bert_embed": is_bert,
-        "distance_from_target": int(experiment_tools.select_param_value('DISTANCE_FROM_TARGET', argv.distance_from_target)),
+        "bert_embed": is_bert
     }
 
 
@@ -56,7 +55,8 @@ def main(argv):
         "m": argv.m,
         "n": argv.n,
         "sparsity_type": experiment_tools.select_param_value('SPARSITY_TYPE', argv.sparsity_type),
-        "reg_goal_params_list": reg_goal_params
+        "reg_goal_params_list": reg_goal_params,
+        "distance_from_target": int(experiment_tools.select_param_value('DISTANCE_FROM_TARGET', argv.distance_from_target))
     }
 
     print(training_args)
