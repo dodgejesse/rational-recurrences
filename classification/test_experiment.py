@@ -7,7 +7,8 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 
 def main(argv):
-    loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_data_dir,argv.dataset), argv.bert_embed, False)
+    is_bert = experiment_tools.str2bool(experiment_tools.select_param_value('BERT_EMBED', argv.bert_embed))
+    loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_data_dir,argv.dataset), is_bert, False)
 
     models = argv.input_model.split(",")
     d_outs = argv.d_out.split("_")
@@ -23,7 +24,7 @@ def main(argv):
                                     batch_size=argv.batch_size, use_last_cs=argv.use_last_cs,
                                     base_data_dir = argv.base_data_dir, input_model=model,
                                     weight_norm = argv.weight_norm,
-                                    bert_embed = argv.bert_embed)
+                                    bert_embed = is_bert)
 
         if argv.visualize > 0:
             train_classifier.main_visualize(args, os.path.join(argv.base_data_dir,argv.dataset), argv.visualize)
