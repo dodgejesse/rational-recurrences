@@ -17,7 +17,7 @@ def str2bool(str):
 def main(argv):
     is_bert = str2bool(experiment_tools.select_param_value('BERT_EMBED', argv.bert_embed))
 
-    loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_data_dir, argv.dataset), is_bert)
+    loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_data_dir, argv.dataset), is_bert, True)
 
     seed = experiment_tools.select_param_value('SEED', argv.seed)
     if seed is not None:
@@ -55,7 +55,8 @@ def main(argv):
         "m": argv.m,
         "n": argv.n,
         "sparsity_type": experiment_tools.select_param_value('SPARSITY_TYPE', argv.sparsity_type),
-        "reg_goal_params_list": reg_goal_params
+        "reg_goal_params_list": reg_goal_params,
+        "distance_from_target": int(experiment_tools.select_param_value('DISTANCE_FROM_TARGET', argv.distance_from_target))
     }
 
     print(training_args)
@@ -99,6 +100,7 @@ def run_random_search(training_args, rand_search_args):
             counter=counter, total_evals=total_evals, start_time=start_time,
             reg_goal_params=reg_goal_params,
             sparsity_type=rand_search_args["sparsity_type"],
+            distance_from_target=rand_search_args["distance_from_target"],
             **training_args)
 
         all_reg_search_counters.append(reg_search_counters)
@@ -147,7 +149,7 @@ def training_arg_parser():
     p.add_argument("--l", help="L argument for random search", type=int, default=5)
     p.add_argument("--m", help="M argument for random search", type=int, default=20)
     p.add_argument("--n", help="N argument for random search", type=int, default=5)
-
+    p.add_argument("--distance_from_target", help="Distance from target goal allowed in random search", type=int, default=10)
     p.add_argument("--baseline", help="For running baselines.", action="store_true")
     
     return p
