@@ -41,6 +41,7 @@ def get_model_filepath(args, d_out):
 def check_new_model_predicts_same(model, new_model, data_x, data_y, new_d_out, gpu):
     # can manually look at feats vs new_model_feats, should be close (and identical for max-length WFSAs)
     #if check == "manually check features from wfsa":
+    print("New_d_out={}".format(new_d_out))
     if True:
         cur_x = (data_x[0])
         model_wfsakeep_pred = predict_one_example(model, ALLWFSA, cur_x)
