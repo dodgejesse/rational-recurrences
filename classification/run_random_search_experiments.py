@@ -11,11 +11,8 @@ import regularization_search_experiments
 from experiment_params import ExperimentParams
 
 
-def str2bool(str):
-  return str.lower() in ["true", "1"]
-
 def main(argv):
-    is_bert = str2bool(experiment_tools.select_param_value('BERT_EMBED', argv.bert_embed))
+    is_bert = experiment_tools.str2bool(experiment_tools.select_param_value('BERT_EMBED', argv.bert_embed))
 
     loaded_embedding = experiment_tools.preload_embed(os.path.join(argv.base_data_dir, argv.dataset), is_bert, True)
 

@@ -55,3 +55,6 @@ def general_arg_parser():
 
     return p
 
+def str2bool(str):
+  return str.lower() in ["true", "1"]
+

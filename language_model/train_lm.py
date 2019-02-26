@@ -112,10 +112,10 @@ class Model(nn.Module):
         elif args.model == "rrnn":
             first_layer_d_in = args.d_out.split(";")[0]
             final_layer_d_out = args.d_out.split(";")[-1]
-            num_wfsa_input = sum([int(one_size) for one_size in first_layer_d_in.split(",")])
+            # num_wfsa_input = sum([int(one_size) for one_size in first_layer_d_in.split(",")])
             num_wfsa_output = sum([int(one_size) for one_size in final_layer_d_out.split(",")])
 
-            self.input_layer = nn.Linear(self.emb_size, num_wfsa_input)
+            # self.input_layer = nn.Linear(self.emb_size, num_wfsa_input)
             self.output_layer = nn.Linear(self.emb_size, self.n_V)
             if args.semiring == "plus_times":
                 self.semiring = PlusTimesSemiring
@@ -125,7 +125,7 @@ class Model(nn.Module):
                 assert False, "Semiring should either be plus_times or max_plus, not {}".format(args.semiring)
             self.encoder = rrnn.RRNN(
                 self.semiring,
-                num_wfsa_input,
+                self.emb_size,
                 args.d_out,
                 self.depth,
                 pattern=args.pattern,
@@ -179,7 +179,7 @@ class Model(nn.Module):
 
     def forward(self, x, init):
         emb = self.input_drop(self.emb_layer(x))
-        emb = self.drop(self.input_layer(emb).tanh())
+        # emb = self.drop(self.input_layer(emb).tanh())
         output, hidden, _ = self.encoder(emb, init)
 
         if self.num_mlp_layer == 2:
@@ -202,7 +202,7 @@ class Model(nn.Module):
         elif self.args.model == "rrnn":
             init_input = self.init_input(batch_size)
             emb = self.input_drop(self.emb_layer(init_input))
-            emb = self.drop(self.input_layer(emb).tanh())
+            # emb = self.drop(self.input_layer(emb).tanh())
             output, hidden, _ = self.encoder(emb, None)
             return hidden
         else:
