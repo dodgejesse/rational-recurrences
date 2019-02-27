@@ -550,7 +550,7 @@ if __name__ == "__main__":
     argparser.add_argument("--weight_decay", type=float, default=1e-6)
     argparser.add_argument("--clip_grad", type=float, default=5.)
     argparser.add_argument("--gpu", type=str2bool, default=False)
-    argparser.add_argument("--eval_ite", type=int, default=100)
+    argparser.add_argument("--eval_ite", type=int, default=1000)
     argparser.add_argument("--patience", type=int, default=30)
     argparser.add_argument("--sparsity_type", type=str, default="none")
     argparser.add_argument("--logging_dir", type=str, default="./logging/")
