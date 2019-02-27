@@ -51,8 +51,8 @@ def RRNN_Ngram_Compute_CPU(d, ngram, semiring, bidirectional=False):
             # Otherwise, including history of forget gate.
             else:
                 prev_f_indices = prev_traces[i].u_indices
-                # max-times semirings
-                if semiring.type == 2:
+                # plus-times or max-times semirings
+                if semiring.type == 0 or semiring.type == 2:
                     f_score *= prev_traces[i].score
                 # Max plus or log max times
                 else:
@@ -663,6 +663,7 @@ class RRNNCell(nn.Module):
 
         for i in range(0, self.ngram):
             u[..., i] = self.semiring.activation(self.semiring.conditional_times(u_[..., i], 1. - u[..., i + self.ngram]))  # input
+
 
         if self.use_output_gate:
             output_bias = bias[-1, ...]

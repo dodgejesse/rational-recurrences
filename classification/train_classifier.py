@@ -414,7 +414,7 @@ def train_model(epoch, model, optimizer,
         new_model, new_d_out = save_learned_structure.extract_learned_structure(model, args)
         if new_model is not None:
             if new_d_out.split(",")[-1] != args.d_out:
-                save_learned_structure.check_new_model_predicts_same(model, new_model, valid_x, valid_y, new_d_out, args.gpu)
+                #save_learned_structure.check_new_model_predicts_same(model, new_model, valid_x, valid_y, new_d_out, args.gpu)
                 new_model_valid_err = eval_model(niter, new_model, valid_x, valid_y)
             else:
                 new_model_valid_err = valid_err
@@ -433,14 +433,14 @@ def train_model(epoch, model, optimizer,
 
 def main_visualize(args, dataset_file, top_k):
     # datasets and labels are 3-size array: 0 - train, 1 - dev, 2 - test
-    args.semiring = 'max_times'
+    #args.semiring = 'max_times'
     model, datasets, labels, emb_layer = main_init(args)
 
     model.eval()
 
     # Creating dev batches
     d, l, txt_batches = dataloader.create_batches(
-        datasets[1], labels[1],
+        datasets[0], labels[0],
         args.batch_size,
         emb_layer.word2id,
         sort=True,
@@ -510,6 +510,8 @@ def main_visualize(args, dataset_file, top_k):
                     all_traces[i][j] = np.concatenate((all_traces[i][j], traces[i][j].u_indices))
                     all_scores_min[i][j] = np.concatenate((all_scores_min[i][j], traces_min[i][j].score))
                     all_traces_min[i][j] = np.concatenate((all_traces_min[i][j], traces_min[i][j].u_indices))
+        # break
+
 
 
     # loop one: pattern length
@@ -663,7 +665,7 @@ def main_init(args):
         bert_embed=args.bert_embed
     )
 
-    nclasses = max(train_Y) + 1
+    nclasses = max(valid_Y) + 1
 
     model = Model(args, emb_layer, nclasses)
 

@@ -111,7 +111,6 @@ def read_bert(path, read_train=True, seed=1234):
     valid_path = os.path.join(path, "dev_bert")
     valid_x, valid_y = read_bert_file(valid_path)
 
-
     if read_train:
         train_path = os.path.join(path, "train_bert")
         train_x, train_y = read_bert_file(train_path)
@@ -126,7 +125,7 @@ def read_bert(path, read_train=True, seed=1234):
         test_path = os.path.join(path, "test_bert")
         test_x, test_y = read_bert_file(test_path)
 
-        [], [], valid_x, valid_y, test_x, test_y
+        return [], [], valid_x, valid_y, test_x, test_y
 
 def read_bert_file(path):
     data = []
