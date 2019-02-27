@@ -20,6 +20,7 @@ if "../classification/" not in sys.path:
 
 if "classification/" not in sys.path:
     sys.path.append("classification/")
+import save_learned_structure
 
 import train_classifier
 
@@ -264,6 +265,7 @@ def train_model(model, logging_file):
     dev = create_batches(dev, map_to_ids, 1, cuda=args.gpu)
     test = read_corpus(args.test)
     test = create_batches(test, map_to_ids, 1, cuda=args.gpu)
+    reduced_model_path = ""
     for epoch in range(args.max_epoch):
         
         start_time = time.time()
@@ -321,7 +323,6 @@ def train_model(model, logging_file):
                     p.data.add_(-args.lr, p.grad.data)
 
             if (i + 1) % args.eval_ite == 0:
-
                 dev_ppl = eval_model(model, dev)
                 print_and_log("| Epoch={} | ite={} | lr={:.4f} | train_ppl={:.2f} | dev_ppl={:.2f} |"
                                  "\n".format(
@@ -332,38 +333,11 @@ def train_model(model, logging_file):
                     dev_ppl
                                  ), logging_file)
                 model.print_pnorm()
+
                 sys.stdout.flush()
-                #import pdb; pdb.set_trace()
+
                 cur_loss = 0.0
 
-                if dev_ppl < best_dev:
-                    unchanged = 0
-                    best_dev = dev_ppl
-                    test_ppl = eval_model(model, test)
-                    print_and_log("\t[eval]  test_ppl={:.2f}\n".format(
-                        test_ppl
-                    ), logging_file)
-                    sys.stdout.flush()
-                # DEBUG
-                if args.sparsity_type == "states" and False:
-
-                    import save_learned_structure
-                    new_model, new_d_out = save_learned_structure.extract_learned_structure(model, args, epoch)
-                    if new_d_out != '0,0,0,710;0,0,0,710':
-                        import pdb;pdb.set_trace()
-                    if new_model is not None:
-                        new_model_valid_err = eval_model(new_model, dev)
-                        model_valid_err = eval_model(model, dev)
-                        print("{}, {}".format(new_model_valid_err, model_valid_err))
-                        #new_model_valid_err = eval_model(niter, new_model, valid_x, valid_y)
-                    
-                    else:
-                        new_model_valid_err = 0.0
-
-        # saving the group norms to the logging file. if args.sparsity_type isn't one of the regularized sparsities, it does notihng   
-        regularization_groups = train_classifier.get_regularization_groups(model, args)
-        train_classifier.log_groups(model, args, logging_file, regularization_groups)
-        
         train_ppl = np.exp(total_loss/N)
         dev_ppl = eval_model(model, dev)
 
@@ -381,7 +355,6 @@ def train_model(model, logging_file):
         sys.stdout.flush()
 
 
-        
         if dev_ppl < best_dev:
             unchanged = 0
             best_dev = dev_ppl
@@ -392,6 +365,32 @@ def train_model(model, logging_file):
                 (time.time() - start_time) / 60.0
             ), logging_file)
             sys.stdout.flush()
+
+
+            # DEBUG
+            if args.sparsity_type == "states" and False:
+                if reduced_model_path != "":
+                    save_learned_structure.remove_old(reduced_model_path)
+
+                new_d_out, reduced_model_path = save_learned_structure.to_file(model, args, None, None, print_debug = False)
+                #import pdb; pdb.set_trace()
+                new_model, new_d_out = save_learned_structure.extract_learned_structure(model, args, epoch)
+                #if new_d_out != '0,0,0,710;0,0,0,710':
+                #    import pdb;pdb.set_trace()
+                if new_model is not None:
+
+                    print_and_log("size of extracted structure: {}\n".format(new_d_out), logging_file)
+                    new_model_valid_err = eval_model(new_model, dev)
+                    model_valid_err = eval_model(model, dev)
+                    print_and_log("dev learned structure:{}, full structure {}\n".format(round(new_model_valid_err, 3),
+                                                                                       round(model_valid_err, 3)), logging_file)
+                    new_model_test_err = eval_model(new_model, test)
+                    model_test_err = eval_model(model, test)
+                    print_and_log("test learned structure:{}, full structure {}\n".format(round(new_model_test_err, 3),
+                                                                                        round(model_test_err, 3)), logging_file)
+
+
+            
         else:
             unchanged += 1
         if args.lr_decay_epoch > 0 and epoch >= args.lr_decay_epoch:
@@ -455,7 +454,7 @@ def update_environment_variables(args):
         args.output_dropout = in_out_dropout
 
 
-def main(args):
+def main(args):    
     logging_file = train_classifier.init_logging(args)
 
     torch.manual_seed(args.seed)
@@ -506,9 +505,7 @@ def generate_filename(args):
         name = name + "_mp"
     elif args.semiring == 'max_times':
         name = name + "_mt"
-
-    args.filename = name + ".txt"
-
+    args.filename = name
 
 def str2bool(v):
     if v.lower() in ("yes", "true", "t", "y", "1"):

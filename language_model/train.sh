@@ -35,7 +35,7 @@ output_dropout=0.65
 
 lr=1.0
 lr_decay=0.98
-lr_decay_epoch=1500
+lr_decay_epoch=150
 activation="tanh"
 batch_size=32
 model="rrnn"
@@ -47,7 +47,7 @@ rnn_dropout=0.2
 use_output_gate=True
 unroll_size=35
 use_rho=False
-max_epoch=300
+max_epoch=350
 weight_decay=1e-5
 patience=30
 gpu=True
