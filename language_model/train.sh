@@ -28,14 +28,14 @@ fi
 # output_dropout=0.6
 
 pattern="4-gram;4-gram"
-d_out="710;710"
-emb_size=710
+d_out="508;508"
+emb_size=508
 input_dropout=0.65
 output_dropout=0.65
 
 lr=1.0
 lr_decay=0.98
-lr_decay_epoch=150
+lr_decay_epoch=1500
 activation="tanh"
 batch_size=32
 model="rrnn"
@@ -54,6 +54,9 @@ gpu=True
 sparsity_type=states
 reg_strength=0.01
 logging_dir=$2
+eval_ite=1000
+
+CUDA_VISIBLE_DEVICES=0
 
 com="python3.6 train_lm.py --train $1/train --dev $1/dev --test $1/test \
 --d_out=$d_out \
@@ -79,7 +82,8 @@ com="python3.6 train_lm.py --train $1/train --dev $1/dev --test $1/test \
 --gpu=$gpu \
 --sparsity_type=$sparsity_type \
 --reg_strength=$reg_strength \
---logging_dir=$logging_dir"
+--logging_dir=$logging_dir \
+--eval_ite=$eval_ite"
 
 
 echo $com
