@@ -44,7 +44,7 @@ class ExperimentParams:
                  lr_decay=0,
                  lr_schedule_decay=0.5,
                  gpu=True,
-                 eval_ite=50,
+                 eval_ite=1000,
                  patience=30,
                  lr_patience=10,
                  weight_decay=1e-6,
