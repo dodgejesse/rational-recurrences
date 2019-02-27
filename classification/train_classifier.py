@@ -257,7 +257,7 @@ def log_groups(model, args, logging_file, groups=None):
 def init_logging(args):
     if args.language_modeling:
         dir_path = args.logging_dir
-        filename = args.filename
+        filename = args.filename + ".txt"
     else:
         dir_path = args.logging_dir + args.dataset + "/"
         filename = args.filename() + ".txt"
@@ -430,7 +430,6 @@ def train_model(epoch, model, optimizer,
     sys.stdout.write("\n")
     sys.stdout.flush()
     return best_valid, unchanged, stop
-
 
 def main_visualize(args, dataset_file, top_k):
     # datasets and labels are 3-size array: 0 - train, 1 - dev, 2 - test
