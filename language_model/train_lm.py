@@ -250,7 +250,7 @@ def repackage_hidden(args, hidden):
 
 def train_model(model, logging_file):
     args = model.args
-    unchanged, best_dev = 0, 200
+    unchanged, best_dev = 0, 1000
 
     unroll_size = args.unroll_size
     batch_size = args.batch_size
@@ -294,7 +294,6 @@ def train_model(model, logging_file):
                 regularization_term = 0
             else:
                 regularization_groups = train_classifier.get_regularization_groups(model, args)
-                
                 regularization_term = regularization_groups.sum()
                 
                 if args.reg_strength_multiple_of_loss and args.reg_strength == 0:
@@ -323,7 +322,8 @@ def train_model(model, logging_file):
                     p.data.add_(-args.lr, p.grad.data)
 
             if (i + 1) % args.eval_ite == 0:
-                dev_ppl = eval_model(model, dev)
+                #dev_ppl = eval_model(model, dev)
+                dev_ppl = 9999
                 print_and_log("| Epoch={} | ite={} | lr={:.4f} | train_ppl={:.2f} | dev_ppl={:.2f} |"
                                  "\n".format(
                     epoch,
@@ -339,7 +339,22 @@ def train_model(model, logging_file):
                 cur_loss = 0.0
 
         train_ppl = np.exp(total_loss/N)
-        dev_ppl = eval_model(model, dev)
+        # extracting the learned structure to compute its dev result
+        if args.sparsity_type == "states" and True:
+
+            model_dev_ppl = eval_model(model, dev)
+            
+            new_model, new_d_out = save_learned_structure.extract_learned_structure(model, args, epoch)
+            if new_model is not None:
+                print_and_log("size of extracted structure: {}\n".format(new_d_out), logging_file)
+                new_model_dev_ppl = eval_model(new_model, dev)
+                print_and_log("dev learned structure:{}, full structure {}\n".format(round(new_model_dev_ppl, 3),
+                                                                                     round(model_dev_ppl, 3)), logging_file)
+                dev_ppl = new_model_dev_ppl
+            else:
+                dev_ppl = model_dev_ppl
+        else:
+            dev_ppl = eval_model(model, dev)
 
         print_and_log("-" * 89 + "\n", logging_file)
         print_and_log("| End of epoch {} | lr={:.4f} | train_ppl={:.2f} | dev_ppl={:.2f} |"
@@ -354,43 +369,40 @@ def train_model(model, logging_file):
         model.print_pnorm()
         sys.stdout.flush()
 
-
         if dev_ppl < best_dev:
             unchanged = 0
             best_dev = dev_ppl
             start_time = time.time()
-            test_ppl = eval_model(model, test)
+            
+            if args.sparsity_type == "states":
+                if reduced_model_path != "":
+                    save_learned_structure.remove_old(reduced_model_path)
+                # new_model is defined only if args.sparsity_type == "states" and an extracted model is not None
+                model_test_ppl = eval_model(model, test)
+                
+                if new_model is not None:
+                    new_model_test_ppl = eval_model(new_model, test)
+                    reduced_model_path = save_learned_structure.get_model_filepath(args, new_d_out)
+                    args.reduced_model_path = reduced_model_path
+                    args.new_d_out = new_d_out
+                    torch.save(new_model.state_dict(), reduced_model_path)
+                else:
+                    new_model_test_ppl = 999999
+                    
+                print_and_log("test learned structure:{}, full structure {}\n".format(round(new_model_test_ppl, 3),
+                                                                                    round(model_test_ppl, 3)), logging_file)
+
+                test_ppl = new_model_test_ppl
+            else:
+                test_ppl = eval_model(model, test)
+                torch.save(model.state_dict(), args.logging_dir + args.filename + "_model.pth")
             print_and_log("\t[eval]  test_ppl={:.2f}\t[{:.2f}m]\n".format(
                 test_ppl,
                 (time.time() - start_time) / 60.0
             ), logging_file)
             sys.stdout.flush()
 
-
-            # DEBUG
-            if args.sparsity_type == "states" and False:
-                if reduced_model_path != "":
-                    save_learned_structure.remove_old(reduced_model_path)
-
-                new_d_out, reduced_model_path = save_learned_structure.to_file(model, args, None, None, print_debug = False)
-                #import pdb; pdb.set_trace()
-                new_model, new_d_out = save_learned_structure.extract_learned_structure(model, args, epoch)
-                #if new_d_out != '0,0,0,710;0,0,0,710':
-                #    import pdb;pdb.set_trace()
-                if new_model is not None:
-
-                    print_and_log("size of extracted structure: {}\n".format(new_d_out), logging_file)
-                    new_model_valid_err = eval_model(new_model, dev)
-                    model_valid_err = eval_model(model, dev)
-                    print_and_log("dev learned structure:{}, full structure {}\n".format(round(new_model_valid_err, 3),
-                                                                                       round(model_valid_err, 3)), logging_file)
-                    new_model_test_err = eval_model(new_model, test)
-                    model_test_err = eval_model(model, test)
-                    print_and_log("test learned structure:{}, full structure {}\n".format(round(new_model_test_err, 3),
-                                                                                        round(model_test_err, 3)), logging_file)
-
-
-            
+                
         else:
             unchanged += 1
         if args.lr_decay_epoch > 0 and epoch >= args.lr_decay_epoch:
@@ -454,12 +466,20 @@ def update_environment_variables(args):
         args.output_dropout = in_out_dropout
 
 
-def main(args):    
+def main(args):
+    generate_filename(args)
     logging_file = train_classifier.init_logging(args)
 
     torch.manual_seed(args.seed)
     train = read_corpus(args.train, shuffle=False)
     model = Model(train, args)
+    if args.fine_tune:
+        if args.gpu:
+            state_dict = torch.load(args.reduced_model_path)
+        else:
+            state_dict = torch.load(args.reduced_model_path, map_location=lambda storage, loc: storage)
+        model.load_state_dict(state_dict)
+
     model.logging_file = logging_file
     if args.gpu:
         model.cuda()
@@ -478,6 +498,21 @@ def main(args):
 
     train_model(model, logging_file)
     return
+
+def train_and_finetune(args):
+    # only use lr_decay if not using regularizer
+    lr_decay_epoch = args.lr_decay_epoch
+    args.lr_decay_epoch = args.max_epoch + 1
+    main(args)
+
+    args.lr_decay_epoch = lr_decay_epoch
+    args.fine_tune = True
+    args.d_out = args.new_d_out
+    args.pattern = "1-gram,2-gram,3-gram,4-gram;1-gram,2-gram,3-gram,4-gram"
+    args.sparsity_type = "none"
+    args.reg_strength = 0
+    args.learned_structure = "l1-states-learned"
+    main(args)
 
 def print_and_log(string, logging_file):
     sys.stdout.write(string)
@@ -563,6 +598,7 @@ if __name__ == "__main__":
     argparser.add_argument("--prox_step", type=bool, default=False)
     argparser.add_argument("--learned_structure", help="Learned structure",
                            type=str, default="l1-states-learned")
+    argparser.add_argument("--fine_tune", type=bool, default=False)
 
     args = argparser.parse_args()
     args.language_modeling = True
@@ -570,5 +606,7 @@ if __name__ == "__main__":
     update_environment_variables(args)
     print(args)
 
-    generate_filename(args)
-    main(args)
+    if args.sparsity_type == "states":
+        train_and_finetune(args)
+    else:
+        main(args)

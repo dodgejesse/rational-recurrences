@@ -28,8 +28,13 @@ fi
 # output_dropout=0.6
 
 pattern="4-gram;4-gram"
-d_out="508;508"
-emb_size=508
+d_out="780;780"
+#pattern="1-gram,2-gram,3-gram,4-gram;1-gram,2-gram,3-gram,4-gram"
+#d_out="124,277,68,6;8,239,178,17"
+#d_out="0,293,320,167;0,0,2,778"
+#d_out="66,150,34,4;94,176,55,6"
+
+emb_size=250
 input_dropout=0.65
 output_dropout=0.65
 
@@ -52,11 +57,10 @@ weight_decay=1e-5
 patience=30
 gpu=True
 sparsity_type=states
-reg_strength=0.01
+reg_strength=0.000085
 logging_dir=$2
-eval_ite=1000
+eval_ite=100
 
-CUDA_VISIBLE_DEVICES=0
 
 com="python3.6 train_lm.py --train $1/train --dev $1/dev --test $1/test \
 --d_out=$d_out \

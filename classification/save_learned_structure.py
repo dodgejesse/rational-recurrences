@@ -141,7 +141,8 @@ def extract_learned_structure(model, args, epoch = 0):
     num_ngrams_per_layer = []
     num_of_each_ngram_per_layer = []
     for i in range(layers):
-        cur_layer_states = states[:,i*num_wfsas:(i+1)*num_wfsas,:]
+        #cur_layer_states = states[:,i*num_wfsas:(i+1)*num_wfsas,:]
+        cur_layer_states = states[i]
         num_ngrams, num_of_each_ngram = find_num_ngrams(cur_layer_states, num_wfsas)
    
         if max(num_ngrams) == -1:
@@ -219,7 +220,7 @@ def update_linear_output_layer(model, new_model, num_ngrams, all_wfsa_indices):
 
 # all weights are either "model" weights or "new_model" weights, as denoted in the name of the local variable
 def update_new_model_weights(model, new_model, num_ngrams, args, layer, all_wfsa_indices_by_layer):
-    embed_dim = model.emb_layer.emb_size
+    #embed_dim = model.emb_layer.emb_size
     
     # need to extract the weights that are non-zero, and if any are non-zero for a particular wfsa,
     # should also extract the final column, which contains the output gate weights.
@@ -227,7 +228,7 @@ def update_new_model_weights(model, new_model, num_ngrams, args, layer, all_wfsa
     uses_output_gate = model.encoder.rnn_lst[layer].cells[0].ngram * 2 + 1 == model.encoder.rnn_lst[layer].cells[0].k
     num_wfsas = sum([int(one_size) for one_size in args.d_out.split(";")[layer].split(",")])
     
-    reshaped_model_weights = model.encoder.rnn_lst[layer].cells[0].weight.view(embed_dim, num_wfsas, num_edges_in_wfsa)
+    reshaped_model_weights = model.encoder.rnn_lst[layer].cells[0].weight.view(-1, num_wfsas, num_edges_in_wfsa)
 
     cur_cell_num = 0
     all_wfsa_indices = []
